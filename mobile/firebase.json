@@ -1,1 +1,38 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"mettingapp-aef60","appId":"1:959832172654:android:5e378f6d9ad32edb58de7f","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"mettingapp-aef60","configurations":{"android":"1:959832172654:android:5e378f6d9ad32edb58de7f","ios":"1:959832172654:ios:fef0bef53648350258de7f","macos":"1:959832172654:ios:fef0bef53648350258de7f","web":"1:959832172654:web:925745fd4655156d58de7f","windows":"1:959832172654:web:b03db838e8df7a2a58de7f"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "mettingapp-aef60",
+          "appId": "1:959832172654:android:5e378f6d9ad32edb58de7f",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "mettingapp-aef60",
+          "configurations": {
+            "android": "1:959832172654:android:5e378f6d9ad32edb58de7f",
+            "ios": "1:959832172654:ios:fef0bef53648350258de7f",
+            "macos": "1:959832172654:ios:fef0bef53648350258de7f",
+            "web": "1:959832172654:web:925745fd4655156d58de7f",
+            "windows": "1:959832172654:web:b03db838e8df7a2a58de7f"
+          }
+        }
+      }
+    }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
+    }
+  ]
+}

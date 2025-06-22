@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
+import 'package:metting_app/providers/auth_provider.dart' as app_auth;
 import 'package:metting_app/constants.dart';
-import 'login_screen.dart';
+import 'package:metting_app/screens/home_screen.dart';
+import 'package:metting_app/screens/login_screen.dart' show LoginScreen;
+import 'package:metting_app/components/already_have_an_account_acheck.dart';
+import 'package:metting_app/components/or_divider.dart';
+import 'package:metting_app/components/social_icon.dart';
+import 'package:metting_app/components/social_signup.dart';
 
 class SignUpScreen extends StatelessWidget {
   const SignUpScreen({Key? key}) : super(key: key);
@@ -21,7 +27,7 @@ class SignUpScreen extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 24.0),
               child: SignUpForm(),
             ),
-            const SocalSignUp(),
+            const SocialSignUp(),
           ],
         ),
       ),
@@ -70,301 +76,160 @@ class _SignUpFormState extends State<SignUpForm> {
   final TextEditingController confirmPasswordController =
       TextEditingController();
   final _formKey = GlobalKey<FormState>();
-  bool isLoading = false;
-
-  Future<void> _signUp() async {
-    setState(() {
-      isLoading = true;
-    });
-    try {
-      await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: emailController.text.trim(),
-        password: passwordController.text.trim(),
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Đăng ký thành công!')),
-      );
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
-      );
-    } on FirebaseAuthException catch (e) {
-      String msg = 'Lỗi: ';
-      if (e.code == 'email-already-in-use') {
-        msg += 'Email đã được sử dụng.';
-      } else if (e.code == 'invalid-email') {
-        msg += 'Email không hợp lệ.';
-      } else if (e.code == 'weak-password') {
-        msg += 'Mật khẩu quá yếu.';
-      } else {
-        msg += e.message ?? e.code;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg)),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Lỗi: $e')),
-      );
-    } finally {
-      setState(() {
-        isLoading = false;
-      });
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
-    return Form(
-      key: _formKey,
-      child: Column(
-        children: [
-          TextFormField(
-            controller: emailController,
-            keyboardType: TextInputType.emailAddress,
-            textInputAction: TextInputAction.next,
-            cursorColor: kPrimaryColor,
-            decoration: const InputDecoration(
-              hintText: "Your email",
-              prefixIcon: Padding(
-                padding: EdgeInsets.all(defaultPadding),
-                child: Icon(Icons.person),
-              ),
-            ),
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Vui lòng nhập email';
-              }
-              return null;
-            },
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: defaultPadding),
-            child: TextFormField(
-              controller: passwordController,
-              textInputAction: TextInputAction.done,
-              obscureText: true,
-              cursorColor: kPrimaryColor,
-              decoration: const InputDecoration(
-                hintText: "Your password",
-                prefixIcon: Padding(
-                  padding: EdgeInsets.all(defaultPadding),
-                  child: Icon(Icons.lock),
-                ),
-              ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Vui lòng nhập mật khẩu';
-                }
-                if (value.length < 6) {
-                  return 'Mật khẩu tối thiểu 6 ký tự';
-                }
-                return null;
-              },
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: defaultPadding),
-            child: TextFormField(
-              controller: confirmPasswordController,
-              textInputAction: TextInputAction.done,
-              obscureText: true,
-              cursorColor: kPrimaryColor,
-              decoration: const InputDecoration(
-                hintText: "re-enter password",
-                prefixIcon: Padding(
-                  padding: EdgeInsets.all(defaultPadding),
-                  child: Icon(Icons.lock),
-                ),
-              ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Vui lòng nhập lại mật khẩu';
-                }
-                if (value != passwordController.text) {
-                  return 'Mật khẩu không khớp';
-                }
-                return null;
-              },
-            ),
-          ),
-          const SizedBox(height: defaultPadding / 2),
-          ElevatedButton(
-            onPressed: isLoading
-                ? null
-                : () {
-                    if (_formKey.currentState!.validate()) {
-                      _signUp();
-                    }
-                  },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: kPrimaryColor,
-              minimumSize: const Size.fromHeight(50),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(30),
-              ),
-            ),
-            child: isLoading
-                ? const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white),
-                  )
-                : const Text(
-                    "ĐĂNG KÝ",
-                    style: TextStyle(color: Colors.white),
+    return Consumer<app_auth.AuthProvider>(
+      builder: (context, authProvider, child) {
+        return Form(
+          key: _formKey,
+          child: Column(
+            children: [
+              TextFormField(
+                controller: emailController,
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.next,
+                cursorColor: kPrimaryColor,
+                decoration: const InputDecoration(
+                  hintText: "Email của bạn",
+                  prefixIcon: Padding(
+                    padding: EdgeInsets.all(defaultPadding),
+                    child: Icon(Icons.person),
                   ),
-          ),
-          const SizedBox(height: defaultPadding),
-          AlreadyHaveAnAccountCheck(
-            login: false,
-            press: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const LoginScreen(),
                 ),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class AlreadyHaveAnAccountCheck extends StatelessWidget {
-  final bool login;
-  final VoidCallback press;
-  const AlreadyHaveAnAccountCheck({
-    Key? key,
-    this.login = true,
-    required this.press,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: <Widget>[
-        Text(
-          login ? "Don't have an Account ? " : "Already have an Account ? ",
-          style: const TextStyle(color: kPrimaryColor),
-        ),
-        GestureDetector(
-          onTap: press,
-          child: Text(
-            login ? "Sign Up" : "Sign In",
-            style: const TextStyle(
-              color: kPrimaryColor,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        )
-      ],
-    );
-  }
-}
-
-class OrDivider extends StatelessWidget {
-  const OrDivider({Key? key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    Size size = MediaQuery.of(context).size;
-    return Container(
-      margin: EdgeInsets.symmetric(vertical: size.height * 0.02),
-      width: size.width * 0.8,
-      child: Row(
-        children: <Widget>[
-          buildDivider(),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 10),
-            child: Text(
-              "OR",
-              style: TextStyle(
-                color: kPrimaryColor,
-                fontWeight: FontWeight.w600,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Vui lòng nhập email';
+                  }
+                  if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
+                      .hasMatch(value)) {
+                    return 'Email không hợp lệ';
+                  }
+                  return null;
+                },
               ),
-            ),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: defaultPadding),
+                child: TextFormField(
+                  controller: passwordController,
+                  textInputAction: TextInputAction.done,
+                  obscureText: true,
+                  cursorColor: kPrimaryColor,
+                  decoration: const InputDecoration(
+                    hintText: "Mật khẩu của bạn",
+                    prefixIcon: Padding(
+                      padding: EdgeInsets.all(defaultPadding),
+                      child: Icon(Icons.lock),
+                    ),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Vui lòng nhập mật khẩu';
+                    }
+                    if (value.length < 6) {
+                      return 'Mật khẩu tối thiểu 6 ký tự';
+                    }
+                    return null;
+                  },
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: defaultPadding),
+                child: TextFormField(
+                  controller: confirmPasswordController,
+                  textInputAction: TextInputAction.done,
+                  obscureText: true,
+                  cursorColor: kPrimaryColor,
+                  decoration: const InputDecoration(
+                    hintText: "Nhập lại mật khẩu",
+                    prefixIcon: Padding(
+                      padding: EdgeInsets.all(defaultPadding),
+                      child: Icon(Icons.lock),
+                    ),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Vui lòng nhập lại mật khẩu';
+                    }
+                    if (value != passwordController.text) {
+                      return 'Mật khẩu không khớp';
+                    }
+                    return null;
+                  },
+                ),
+              ),
+              const SizedBox(height: defaultPadding / 2),
+              ElevatedButton(
+                onPressed: authProvider.isLoading
+                    ? null
+                    : () async {
+                        if (_formKey.currentState!.validate()) {
+                          final email = emailController.text.trim();
+                          final password = passwordController.text.trim();
+
+                          try {
+                            await authProvider.signup(email, password);
+
+                            if (!mounted) return;
+
+                            // Chuyển đến màn hình đăng nhập với thông tin vừa đăng ký
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => LoginScreen(
+                                  initialEmail: email,
+                                  initialPassword: password,
+                                  showSuccessSnackbar: true,
+                                ),
+                              ),
+                            );
+                          } catch (e) {
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                    e.toString().replaceAll('Exception: ', '')),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        }
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: kPrimaryColor,
+                  minimumSize: const Size.fromHeight(50),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                ),
+                child: authProvider.isLoading
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text(
+                        "ĐĂNG KÝ",
+                        style: TextStyle(color: Colors.white),
+                      ),
+              ),
+              const SizedBox(height: defaultPadding),
+              AlreadyHaveAnAccountCheck(
+                login: false,
+                press: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const LoginScreen(),
+                    ),
+                  );
+                },
+              ),
+            ],
           ),
-          buildDivider(),
-        ],
-      ),
-    );
-  }
-
-  Expanded buildDivider() {
-    return const Expanded(
-      child: Divider(
-        color: Color(0xFFD9D9D9),
-        height: 1.5,
-      ),
-    );
-  }
-}
-
-class SocalSignUp extends StatelessWidget {
-  const SocalSignUp({Key? key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        const OrDivider(),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            SocalIcon(
-              iconSrc: "assets/icons/facebook.svg",
-              press: () {},
-            ),
-            SocalIcon(
-              iconSrc: "assets/icons/twitter.svg",
-              press: () {},
-            ),
-            SocalIcon(
-              iconSrc: "assets/icons/google-plus.svg",
-              press: () {},
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class SocalIcon extends StatelessWidget {
-  final String? iconSrc;
-  final Function? press;
-  const SocalIcon({
-    Key? key,
-    this.iconSrc,
-    this.press,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: press as void Function()?,
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 10),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          border: Border.all(
-            width: 2,
-            color: kPrimaryLightColor,
-          ),
-          shape: BoxShape.circle,
-        ),
-        child: SvgPicture.asset(
-          iconSrc!,
-          height: 20,
-          width: 20,
-        ),
-      ),
+        );
+      },
     );
   }
 }

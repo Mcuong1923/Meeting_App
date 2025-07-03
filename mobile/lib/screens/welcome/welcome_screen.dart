@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../login_screen.dart';
 import '../signup_screen.dart';
 import '../../components/background.dart';
+import '../../constants.dart';
 
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({Key? key}) : super(key: key);
@@ -18,7 +19,7 @@ class WelcomeScreen extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: <Widget>[
                 const Text(
-                  "WELCOME TO METTING APP",
+                  "WELCOME TO MEETING APP",
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
@@ -46,12 +47,12 @@ class WelcomeScreen extends StatelessWidget {
                         );
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF6F35A5),
+                        backgroundColor: const Color(0xFF673AB7),
                         padding: const EdgeInsets.symmetric(
                             vertical: 20, horizontal: 40),
                       ),
                       child: const Text(
-                        "LOGIN",
+                        "ĐĂNG NHẬP",
                         style: TextStyle(color: Colors.white),
                       ),
                     ),
@@ -74,13 +75,13 @@ class WelcomeScreen extends StatelessWidget {
                         );
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFF1E6FF),
+                        backgroundColor: kPrimaryLightColor,
                         padding: const EdgeInsets.symmetric(
                             vertical: 20, horizontal: 40),
                       ),
                       child: const Text(
-                        "SIGN UP",
-                        style: TextStyle(color: Colors.black),
+                        "ĐĂNG KÝ",
+                        style: TextStyle(color: kTextColor),
                       ),
                     ),
                   ),

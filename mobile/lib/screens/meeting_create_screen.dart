@@ -68,7 +68,7 @@ class _MeetingCreateScreenState extends State<MeetingCreateScreen> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFF673AB7)),
+          borderSide: const BorderSide(color: kPrimaryColor),
         ),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
@@ -78,7 +78,7 @@ class _MeetingCreateScreenState extends State<MeetingCreateScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: kBackgroundPink,
+      backgroundColor: kScaffoldBackgroundColor,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -172,7 +172,8 @@ class _MeetingCreateScreenState extends State<MeetingCreateScreen> {
                   items: ['Thấp', 'Trung bình', 'Cao']
                       .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                       .toList(),
-                  onChanged: (v) => setState(() => _priority = v ?? 'Trung bình'),
+                  onChanged: (v) =>
+                      setState(() => _priority = v ?? 'Trung bình'),
                 ),
                 const SizedBox(height: 16),
 
@@ -209,15 +210,15 @@ class _MeetingCreateScreenState extends State<MeetingCreateScreen> {
                   width: double.infinity,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF673AB7),
+                      backgroundColor: kPrimaryColor,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12)),
                     ),
                     onPressed: () {
                       if (!(_formKey.currentState?.validate() ?? false)) return;
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                          content: Text('Đã tạo cuộc họp!')));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Đã tạo cuộc họp!')));
                       Navigator.pop(context);
                     },
                     child: const Text('Tạo cuộc họp',

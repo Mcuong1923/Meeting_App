@@ -9,6 +9,8 @@ import 'package:metting_app/components/already_have_an_account_acheck.dart';
 import 'package:metting_app/components/or_divider.dart';
 import 'package:metting_app/components/social_icon.dart';
 import 'package:metting_app/components/social_signup.dart';
+import 'package:metting_app/components/rounded_input_field.dart';
+import 'package:metting_app/components/rounded_password_field.dart';
 
 class SignUpScreen extends StatelessWidget {
   const SignUpScreen({Key? key}) : super(key: key);
@@ -85,18 +87,10 @@ class _SignUpFormState extends State<SignUpForm> {
           key: _formKey,
           child: Column(
             children: [
-              TextFormField(
+              RoundedInputField(
                 controller: emailController,
+                hintText: "Email của bạn",
                 keyboardType: TextInputType.emailAddress,
-                textInputAction: TextInputAction.next,
-                cursorColor: kPrimaryColor,
-                decoration: const InputDecoration(
-                  hintText: "Email của bạn",
-                  prefixIcon: Padding(
-                    padding: EdgeInsets.all(defaultPadding),
-                    child: Icon(Icons.person),
-                  ),
-                ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'Vui lòng nhập email';
@@ -108,55 +102,31 @@ class _SignUpFormState extends State<SignUpForm> {
                   return null;
                 },
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: defaultPadding),
-                child: TextFormField(
-                  controller: passwordController,
-                  textInputAction: TextInputAction.done,
-                  obscureText: true,
-                  cursorColor: kPrimaryColor,
-                  decoration: const InputDecoration(
-                    hintText: "Mật khẩu của bạn",
-                    prefixIcon: Padding(
-                      padding: EdgeInsets.all(defaultPadding),
-                      child: Icon(Icons.lock),
-                    ),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Vui lòng nhập mật khẩu';
-                    }
-                    if (value.length < 6) {
-                      return 'Mật khẩu tối thiểu 6 ký tự';
-                    }
-                    return null;
-                  },
-                ),
+              RoundedPasswordField(
+                controller: passwordController,
+                hintText: "Mật khẩu của bạn",
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Vui lòng nhập mật khẩu';
+                  }
+                  if (value.length < 6) {
+                    return 'Mật khẩu tối thiểu 6 ký tự';
+                  }
+                  return null;
+                },
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: defaultPadding),
-                child: TextFormField(
-                  controller: confirmPasswordController,
-                  textInputAction: TextInputAction.done,
-                  obscureText: true,
-                  cursorColor: kPrimaryColor,
-                  decoration: const InputDecoration(
-                    hintText: "Nhập lại mật khẩu",
-                    prefixIcon: Padding(
-                      padding: EdgeInsets.all(defaultPadding),
-                      child: Icon(Icons.lock),
-                    ),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Vui lòng nhập lại mật khẩu';
-                    }
-                    if (value != passwordController.text) {
-                      return 'Mật khẩu không khớp';
-                    }
-                    return null;
-                  },
-                ),
+              RoundedPasswordField(
+                controller: confirmPasswordController,
+                hintText: "Nhập lại mật khẩu",
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Vui lòng nhập lại mật khẩu';
+                  }
+                  if (value != passwordController.text) {
+                    return 'Mật khẩu không khớp';
+                  }
+                  return null;
+                },
               ),
               const SizedBox(height: defaultPadding / 2),
               ElevatedButton(

@@ -1,15 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:metting_app/providers/auth_provider.dart' as app_auth;
+import 'package:metting_app/models/user_role.dart';
 import 'package:metting_app/screens/login_screen.dart';
 import 'package:metting_app/constants.dart';
-import 'package:curved_navigation_bar/curved_navigation_bar.dart';
-import 'package:hugeicons/hugeicons.dart';
+import 'package:flutter_zoom_drawer/flutter_zoom_drawer.dart';
+import 'package:iconly/iconly.dart';
 import 'meeting_list_screen.dart';
 import 'room_management_screen.dart';
 import 'meeting_create_screen.dart';
 import 'settings_screen.dart';
-import 'package:metting_app/components/custom_bottom_nav_bar.dart';
+import 'setup_super_admin_screen.dart';
+import 'package:metting_app/components/menu_item.dart';
+import 'admin_dashboard_screen.dart';
+import 'notification_screen.dart';
+import 'package:metting_app/providers/notification_provider.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -20,15 +25,282 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
+  final ZoomDrawerController zoomDrawerController = ZoomDrawerController();
 
-  void _onItemTapped(int index) {
+  void _onMenuItemTapped(int index) {
     setState(() {
       _selectedIndex = index;
     });
+    zoomDrawerController.close?.call();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Kiểm tra xem user có cần chọn vai trò không
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkRoleSelection();
+    });
+  }
+
+  void _checkRoleSelection() {
+    final authProvider =
+        Provider.of<app_auth.AuthProvider>(context, listen: false);
+    if (authProvider.needsRoleSelection) {
+      Navigator.pushReplacementNamed(context, '/role-selection');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return ZoomDrawer(
+      controller: zoomDrawerController,
+      menuBackgroundColor: isDark ? colorScheme.surface : Colors.white,
+      shadowLayer1Color:
+          isDark ? colorScheme.surfaceVariant : const Color(0xFFF5F5F5),
+      shadowLayer2Color: isDark
+          ? colorScheme.surfaceVariant.withOpacity(0.7)
+          : const Color(0xFFE6E6E6).withOpacity(0.3),
+      borderRadius: 32.0,
+      showShadow: true,
+      style: DrawerStyle.defaultStyle,
+      angle: -12.0,
+      drawerShadowsBackgroundColor:
+          isDark ? Colors.black38 : Colors.grey.shade300,
+      slideWidth: MediaQuery.of(context).size.width * 0.7,
+      menuScreen: _buildMenuScreen(context),
+      mainScreen: _buildMainScreen(context),
+    );
+  }
+
+  Widget _buildMenuScreen(BuildContext context) {
+    final authProvider =
+        Provider.of<app_auth.AuthProvider>(context, listen: false);
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            kPrimaryColor.withOpacity(0.05),
+            kAccentColor.withOpacity(0.05),
+          ],
+        ),
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 20),
+              // Avatar và thông tin user
+              Consumer<app_auth.AuthProvider>(
+                builder: (context, authProvider, child) {
+                  final userModel = authProvider.userModel;
+                  final displayName = userModel?.displayName ?? 'Người dùng';
+                  final email = userModel?.email ?? 'user@example.com';
+                  final role = userModel?.role ?? UserRole.employee;
+
+                  return Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primaryContainer.withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: colorScheme.primary.withOpacity(0.2),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(3),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: colorScheme.primary,
+                              width: 2,
+                            ),
+                          ),
+                          child: CircleAvatar(
+                            radius: 30,
+                            backgroundImage: const NetworkImage(
+                              'https://i.pravatar.cc/150?u=a042581f4e29026704d',
+                            ),
+                            backgroundColor: colorScheme.primaryContainer,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                displayName,
+                                style: textTheme.titleLarge?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: colorScheme.onSurface,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                email,
+                                style: textTheme.bodyMedium?.copyWith(
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 40),
+              // Menu items với chức năng quản lý
+              Expanded(
+                child: Consumer<app_auth.AuthProvider>(
+                  builder: (context, authProvider, child) {
+                    final userModel = authProvider.userModel;
+                    final isAdmin = userModel?.isAdmin == true;
+                    final isDirector = userModel?.isDirector == true;
+
+                    return Column(
+                      children: [
+                        MenuItem(
+                          title: 'Tạo Cuộc Họp',
+                          icon: IconlyBold.plus,
+                          isSelected: false,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const MeetingCreateScreen(),
+                              ),
+                            );
+                            zoomDrawerController.close?.call();
+                          },
+                        ),
+                        // Chỉ hiển thị cho Admin và Director
+                        if (isAdmin || isDirector) ...[
+                          const SizedBox(height: 8),
+                          Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 16),
+                            child: Divider(
+                              color: colorScheme.outline.withOpacity(0.2),
+                              thickness: 1,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          MenuItem(
+                            title: 'Quản lý hệ thống',
+                            icon: Icons.admin_panel_settings_outlined,
+                            isSelected: false,
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      const AdminDashboardScreen(),
+                                ),
+                              );
+                              zoomDrawerController.close?.call();
+                            },
+                          ),
+                        ],
+                        const Spacer(),
+                        MenuItem(
+                          title: 'Giới Thiệu',
+                          icon: Icons.info_rounded,
+                          isSelected: false,
+                          onTap: () {
+                            showAboutDialog(
+                              context: context,
+                              applicationName: 'Meeting App',
+                              applicationVersion: '1.0.0',
+                              applicationIcon: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: colorScheme.primary,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Icon(
+                                  IconlyBold.video,
+                                  color: Colors.white,
+                                  size: 24,
+                                ),
+                              ),
+                              children: [
+                                const Text(
+                                  'Ứng dụng quản lý cuộc họp hiện đại với giao diện đẹp và tính năng đầy đủ.',
+                                ),
+                              ],
+                            );
+                            zoomDrawerController.close?.call();
+                          },
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+              // Logout button
+              Container(
+                margin: const EdgeInsets.only(top: 20),
+                child: MenuItem(
+                  title: 'Đăng Xuất',
+                  icon: IconlyBold.logout,
+                  isSelected: false,
+                  onTap: () async {
+                    try {
+                      await authProvider.logout();
+                      if (!context.mounted) return;
+                      Navigator.pushAndRemoveUntil(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const LoginScreen(),
+                        ),
+                        (route) => false,
+                      );
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Đã đăng xuất thành công!'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    } catch (e) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Lỗi đăng xuất: $e'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMainScreen(BuildContext context) {
     final authProvider =
         Provider.of<app_auth.AuthProvider>(context, listen: false);
 
@@ -63,6 +335,9 @@ class _HomeScreenState extends State<HomeScreen> {
       const SettingsScreen(),
     ];
 
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       backgroundColor: kScaffoldBackgroundColor,
       appBar: AppBar(
@@ -74,136 +349,119 @@ class _HomeScreenState extends State<HomeScreen> {
             fontSize: 22,
           ),
         ),
-        automaticallyImplyLeading: false,
+        leading: IconButton(
+          icon: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: kPrimaryColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              IconlyBold.category,
+              color: kPrimaryColor,
+              size: 20,
+            ),
+          ),
+          onPressed: () => zoomDrawerController.toggle?.call(),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         foregroundColor: kPrimaryColor,
         actions: [
-          IconButton(
-            icon: Icon(Icons.notifications_none, color: kPrimaryColor),
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('Thông báo'),
-                  content: const Text('Chưa có thông báo mới.'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Đóng'),
+          Consumer<NotificationProvider>(
+            builder: (context, notificationProvider, child) {
+              return Stack(
+                children: [
+                  IconButton(
+                    icon: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: kPrimaryColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        IconlyBold.notification,
+                        color: kPrimaryColor,
+                        size: 20,
+                      ),
                     ),
-                  ],
-                ),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const NotificationScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  if (notificationProvider.unreadCount > 0)
+                    Positioned(
+                      right: 6,
+                      top: 6,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 20,
+                          minHeight: 20,
+                        ),
+                        child: Text(
+                          notificationProvider.unreadCount > 99
+                              ? '99+'
+                              : notificationProvider.unreadCount.toString(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
               );
             },
           ),
-          PopupMenuButton<String>(
-            icon: CircleAvatar(
-              backgroundColor: Colors.white,
-              child: Icon(Icons.person, color: kPrimaryColor),
-            ),
-            onSelected: (value) async {
-              if (value == 'profile') {
-                // TODO: Hiện giao diện cập nhật hồ sơ
-                showDialog(
-                  context: context,
-                  builder: (context) => const AlertDialog(
-                    title: Text('Cập nhật hồ sơ'),
-                    content: Text('Chức năng cập nhật hồ sơ sẽ được bổ sung.'),
-                  ),
-                );
-              } else if (value == 'password') {
-                // TODO: Hiện giao diện đổi mật khẩu
-                showDialog(
-                  context: context,
-                  builder: (context) => const AlertDialog(
-                    title: Text('Đổi mật khẩu'),
-                    content: Text('Chức năng đổi mật khẩu sẽ được bổ sung.'),
-                  ),
-                );
-              } else if (value == 'language') {
-                // TODO: Hiện giao diện đổi ngôn ngữ
-                showDialog(
-                  context: context,
-                  builder: (context) => const AlertDialog(
-                    title: Text('Đổi ngôn ngữ'),
-                    content: Text('Chức năng đổi ngôn ngữ sẽ được bổ sung.'),
-                  ),
-                );
-              } else if (value == 'logout') {
-                try {
-                  await authProvider.logout();
-                  if (!context.mounted) return;
-                  Navigator.pushAndRemoveUntil(
-                    context,
-                    MaterialPageRoute(
-                        builder: (context) => const LoginScreen()),
-                    (route) => false,
-                  );
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Đã đăng xuất thành công!'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                } catch (e) {
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Lỗi đăng xuất: $e'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              }
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: 'profile',
-                child: ListTile(
-                  leading: Icon(Icons.person, color: kPrimaryColor),
-                  title: const Text('Cập nhật hồ sơ'),
-                ),
-              ),
-              PopupMenuItem(
-                value: 'password',
-                child: ListTile(
-                  leading: Icon(Icons.lock, color: kPrimaryColor),
-                  title: const Text('Đổi mật khẩu'),
-                ),
-              ),
-              PopupMenuItem(
-                value: 'language',
-                child: ListTile(
-                  leading: Icon(Icons.language, color: kPrimaryColor),
-                  title: const Text('Đổi ngôn ngữ'),
-                ),
-              ),
-              PopupMenuItem(
-                value: 'logout',
-                child: ListTile(
-                  leading: Icon(Icons.logout, color: kPrimaryColor),
-                  title: const Text('Đăng xuất'),
-                ),
-              ),
-            ],
-            color: const Color(0xFFF6F1FF),
-          ),
+          const SizedBox(width: 8),
         ],
       ),
       body: body[_selectedIndex],
-      bottomNavigationBar: CustomBottomNavBar(
+      bottomNavigationBar: NavigationBar(
+        backgroundColor: isDark ? colorScheme.surface : Colors.white,
+        indicatorColor: colorScheme.primaryContainer,
+        elevation: 0,
+        height: 70,
+        labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
         selectedIndex: _selectedIndex,
-        onItemTapped: _onItemTapped,
-        icons: [
-          Icons.home_rounded,
-          _selectedIndex == 1
-              ? Icons.videocam_rounded
-              : Icons.videocam_outlined,
-          _selectedIndex == 2
-              ? Icons.business_rounded
-              : Icons.business_outlined,
-          Icons.settings_rounded,
+        onDestinationSelected: (index) {
+          setState(() {
+            _selectedIndex = index;
+          });
+        },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(IconlyLight.home),
+            selectedIcon: Icon(IconlyBold.home),
+            label: 'Trang Chủ',
+          ),
+          NavigationDestination(
+            icon: Icon(IconlyLight.video),
+            selectedIcon: Icon(IconlyBold.video),
+            label: 'Cuộc Họp',
+          ),
+          NavigationDestination(
+            icon: Icon(IconlyLight.work),
+            selectedIcon: Icon(IconlyBold.work),
+            label: 'Phòng Họp',
+          ),
+          NavigationDestination(
+            icon: Icon(IconlyLight.setting),
+            selectedIcon: Icon(IconlyBold.setting),
+            label: 'Cài Đặt',
+          ),
         ],
       ),
     );

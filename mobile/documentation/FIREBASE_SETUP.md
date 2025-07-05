@@ -20,7 +20,7 @@
 
 ## 2. Kiểm tra Firestore Database
 
-### Bước 1: Truy cập Firestore
+### Bước 1: Truy cập Firestorer
 1. Trong menu bên trái, chọn **Firestore Database**
 2. Nếu chưa có database, click **Create database**
 3. Chọn **Start in test mode** (cho development)

@@ -3,7 +3,10 @@ import 'package:provider/provider.dart';
 import 'package:metting_app/providers/auth_provider.dart' as app_auth;
 import 'package:metting_app/screens/room_management_screen.dart';
 import 'package:metting_app/screens/room_setup_screen.dart';
+import 'package:metting_app/screens/welcome/welcome_screen.dart';
+import 'package:metting_app/screens/role_approval_screen.dart';
 import 'package:metting_app/models/user_role.dart';
+import 'package:metting_app/models/user_model.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -85,7 +88,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.auto_fix_high, color: Colors.indigo),
-              title: const Text('Setup phòng họp',
+                title: const Text('Setup phòng họp',
                   style: TextStyle(color: Colors.indigo)),
               subtitle: const Text('Cấu hình và tạo phòng mặc định'),
               onTap: () {
@@ -100,11 +103,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ] else if (authProvider.userModel?.isDirector == true) ...[
             ListTile(
               leading: const Icon(Icons.manage_accounts, color: Colors.blue),
-              title: const Text('Quản lý người dùng',
+              title: const Text('Quản lý vai trò',
                   style: TextStyle(color: Colors.blue)),
+              subtitle:
+                  const Text('Phê duyệt và quản lý nhân viên trong phòng ban'),
               onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Chức năng đang phát triển')),
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const RoleApprovalScreen(),
+                  ),
                 );
               },
             ),
@@ -129,18 +137,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ListTile(
             leading: const Icon(Icons.logout, color: Colors.red),
             title: const Text('Đăng xuất', style: TextStyle(color: Colors.red)),
-            onTap: () async {
-              try {
-                await authProvider.logout();
-                if (!mounted) return;
-                Navigator.of(context).popUntil((route) => route.isFirst);
-              } catch (e) {
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Lỗi đăng xuất: $e')),
-                );
-              }
-            },
+            onTap: () => _confirmLogout(authProvider),
           ),
           const SizedBox(height: 24),
         ],
@@ -174,7 +171,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (userModel?.isRoleApproved == true) {
       // Nếu đã được duyệt, hiển thị vai trò thực tế
       displayRole = _getRoleDisplayName(userModel!.role);
-      displayDepartment = userModel.departmentName ?? 'Chưa xác định';
+      displayDepartment = _getDepartmentDisplayName(userModel);
       roleColor = _getRoleColor(userModel.role);
       roleIcon = _getRoleIcon(userModel.role);
     } else {
@@ -308,7 +305,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           _buildInfoRow(
                             icon: Icons.business_outlined,
                             label: 'Phòng ban mới',
-                            value: userModel!.pendingDepartment!,
+                            value: _mapDepartmentIdToDisplayName(
+                                userModel!.pendingDepartment!),
                             valueColor: Colors.orange[700]!,
                             fontSize: 12,
                           ),
@@ -427,6 +425,120 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return Icons.person_outline;
       default:
         return Icons.person_outline;
+    }
+  }
+
+  String _getDepartmentDisplayName(UserModel userModel) {
+    // Ưu tiên departmentName nếu có
+    if (userModel.departmentName != null &&
+        userModel.departmentName!.isNotEmpty) {
+      return userModel.departmentName!;
+    }
+
+    // Fallback: Map departmentId thành tên hiển thị
+    if (userModel.departmentId != null) {
+      const departmentMap = {
+        'Công nghệ thông tin': 'Công nghệ thông tin',
+        'Nhân sự': 'Nhân sự',
+        'Marketing': 'Marketing',
+        'Kế toán': 'Kế toán',
+        'Kinh doanh': 'Kinh doanh',
+        'Vận hành': 'Vận hành',
+        'Khác': 'Khác',
+        'SYSTEM': 'Hệ thống',
+        'CNTT': 'Công nghệ thông tin',
+        'HR': 'Nhân sự',
+        'MARKETING': 'Marketing',
+        'ACCOUNTING': 'Kế toán',
+        'BUSINESS': 'Kinh doanh',
+        'OPERATIONS': 'Vận hành',
+      };
+
+      return departmentMap[userModel.departmentId] ?? userModel.departmentId!;
+    }
+
+    return 'Chưa xác định';
+  }
+
+  String _mapDepartmentIdToDisplayName(String departmentId) {
+    const departmentMap = {
+      'Công nghệ thông tin': 'Công nghệ thông tin',
+      'Nhân sự': 'Nhân sự',
+      'Marketing': 'Marketing',
+      'Kế toán': 'Kế toán',
+      'Kinh doanh': 'Kinh doanh',
+      'Vận hành': 'Vận hành',
+      'Khác': 'Khác',
+      'SYSTEM': 'Hệ thống',
+      'CNTT': 'Công nghệ thông tin',
+      'HR': 'Nhân sự',
+      'MARKETING': 'Marketing',
+      'ACCOUNTING': 'Kế toán',
+      'BUSINESS': 'Kinh doanh',
+      'OPERATIONS': 'Vận hành',
+    };
+
+    return departmentMap[departmentId] ?? departmentId;
+  }
+
+  // Xác nhận đăng xuất
+  Future<void> _confirmLogout(app_auth.AuthProvider authProvider) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Xác nhận đăng xuất'),
+        content: const Text('Bạn có chắc chắn muốn đăng xuất khỏi ứng dụng?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Hủy'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child:
+                const Text('Đăng xuất', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        // Hiển thị loading
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(
+            child: CircularProgressIndicator(),
+          ),
+        );
+
+        await authProvider.logout();
+
+        if (!mounted) return;
+
+        // Đóng loading dialog
+        Navigator.of(context).pop();
+
+        // Navigate về welcome screen và clear toàn bộ stack
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const WelcomeScreen()),
+          (route) => false,
+        );
+      } catch (e) {
+        if (!mounted) return;
+
+        // Đóng loading dialog nếu có lỗi
+        Navigator.of(context).pop();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Lỗi đăng xuất: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 }

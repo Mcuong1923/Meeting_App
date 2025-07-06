@@ -1,3 +1,6 @@
+// PASTE RULES TỪ FIREBASE CONSOLE VÀO ĐÂY
+// Copy toàn bộ code từ Firebase Console editor và paste vào đây 
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -11,12 +14,13 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
     
-    function isSuperAdmin() {
-      return isAuthenticated() && getUserRole() == 'superAdmin';
-    }
-    
+    // Cập nhật function phù hợp với enum UserRole
     function isAdmin() {
       return isAuthenticated() && getUserRole() == 'admin';
+    }
+    
+    function isDirector() {
+      return isAuthenticated() && getUserRole() == 'director';
     }
     
     function isManager() {
@@ -31,25 +35,33 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    // Backward compatibility - Admin là quyền cao nhất
+    function isSuperAdmin() {
+      return isAdmin();
+    }
+
     // Rules cho collection users
     match /users/{userId} {
-      // Đọc: User có thể đọc thông tin của chính mình, Super Admin và Admin có thể đọc tất cả
-      allow read: if isOwner(userId) || isSuperAdmin() || isAdmin();
+      // Đọc: User có thể đọc thông tin của chính mình, Admin có thể đọc tất cả
+      allow read: if isOwner(userId) || isAdmin() || isDirector();
       
       // Tạo: User có thể tạo thông tin của chính mình
       allow create: if isOwner(userId) && isAuthenticated();
       
-      // Cập nhật: User có thể cập nhật thông tin cá nhân, chỉ Super Admin mới có thể thay đổi role
-      allow update: if isOwner(userId) && isAuthenticated() && 
+      // Cập nhật: User có thể cập nhật thông tin cá nhân, Admin và Director có thể thay đổi role
+      allow update: if isAuthenticated() && 
         (
-          // User thường chỉ có thể cập nhật thông tin cá nhân (không phải role)
-          (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role'])) ||
-          // Chỉ Super Admin mới có thể thay đổi role
-          isSuperAdmin()
+          // Admin và Director có thể update bất kỳ user nào
+          (isAdmin() || isDirector()) ||
+          // User có thể update hồ sơ cá nhân + gửi yêu cầu role (pendingRole, pendingDepartment)
+          (isOwner(userId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'isRoleApproved', 'departmentId']))
         );
       
-      // Xóa: Chỉ Super Admin mới có thể xóa user
-      allow delete: if isSuperAdmin();
+      // Xóa: Admin có thể xóa bất kỳ user nào, Director có thể xóa user trong department mình
+      allow delete: if isAdmin() || 
+        (isDirector() && 
+         get(/databases/$(database)/documents/users/$(userId)).data.departmentId == 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.departmentId);
     }
 
     // Rules cho collection meetings
@@ -59,20 +71,20 @@ service cloud.firestore {
       
       // Tạo: Employee trở lên có thể tạo meeting
       allow create: if isAuthenticated() && 
-        (isEmployee() || isManager() || isAdmin() || isSuperAdmin());
+        (isEmployee() || isManager() || isDirector() || isAdmin());
       
       // Cập nhật: Creator, Manager trở lên có thể cập nhật
       allow update: if isAuthenticated() && 
         (
           isOwner(resource.data.createdBy) ||
-          isManager() || isAdmin() || isSuperAdmin()
+          isManager() || isDirector() || isAdmin()
         );
       
-      // Xóa: Creator, Admin trở lên có thể xóa
+      // Xóa: Creator, Director trở lên có thể xóa
       allow delete: if isAuthenticated() && 
         (
           isOwner(resource.data.createdBy) ||
-          isAdmin() || isSuperAdmin()
+          isDirector() || isAdmin()
         );
     }
 
@@ -83,15 +95,15 @@ service cloud.firestore {
       
       // Tạo: Manager trở lên có thể tạo room
       allow create: if isAuthenticated() && 
-        (isManager() || isAdmin() || isSuperAdmin());
+        (isManager() || isDirector() || isAdmin());
       
       // Cập nhật: Manager trở lên có thể cập nhật room
       allow update: if isAuthenticated() && 
-        (isManager() || isAdmin() || isSuperAdmin());
+        (isManager() || isDirector() || isAdmin());
       
-      // Xóa: Admin trở lên có thể xóa room
+      // Xóa: Director trở lên có thể xóa room
       allow delete: if isAuthenticated() && 
-        (isAdmin() || isSuperAdmin());
+        (isDirector() || isAdmin());
     }
 
     // Rules cho collection departments
@@ -99,42 +111,56 @@ service cloud.firestore {
       // Đọc: Tất cả authenticated user có thể đọc departments
       allow read: if isAuthenticated();
       
-      // Tạo, cập nhật, xóa: Chỉ Admin trở lên
+      // Tạo, cập nhật, xóa: Chỉ Director trở lên
       allow write: if isAuthenticated() && 
-        (isAdmin() || isSuperAdmin());
+        (isDirector() || isAdmin());
     }
 
     // Rules cho collection notifications
     match /notifications/{notificationId} {
-      // Đọc: User chỉ có thể đọc notification của mình
+      // Đọc: User chỉ có thể đọc notification của mình hoặc Admin có thể đọc tất cả
       allow read: if isAuthenticated() && 
-        (isOwner(resource.data.userId) || isSuperAdmin());
+        (isOwner(resource.data.userId) || isAdmin());
       
       // Tạo: System hoặc Manager trở lên có thể tạo notification
       allow create: if isAuthenticated() && 
-        (isManager() || isAdmin() || isSuperAdmin());
+        (isManager() || isDirector() || isAdmin());
       
       // Cập nhật: User có thể cập nhật notification của mình (đánh dấu đã đọc)
       allow update: if isAuthenticated() && 
-        (isOwner(resource.data.userId) || isSuperAdmin());
+        (isOwner(resource.data.userId) || isAdmin());
       
-      // Xóa: User có thể xóa notification của mình, Super Admin có thể xóa tất cả
+      // Xóa: User có thể xóa notification của mình, Admin có thể xóa tất cả
       allow delete: if isAuthenticated() && 
-        (isOwner(resource.data.userId) || isSuperAdmin());
+        (isOwner(resource.data.userId) || isAdmin());
     }
 
     // Rules cho collection reports
     match /reports/{reportId} {
       // Đọc: Manager trở lên có thể đọc reports
       allow read: if isAuthenticated() && 
-        (isManager() || isAdmin() || isSuperAdmin());
+        (isManager() || isDirector() || isAdmin());
       
-      // Tạo, cập nhật: Admin trở lên có thể quản lý reports
+      // Tạo, cập nhật: Director trở lên có thể quản lý reports
       allow write: if isAuthenticated() && 
-        (isAdmin() || isSuperAdmin());
+        (isDirector() || isAdmin());
       
-      // Xóa: Chỉ Super Admin có thể xóa reports
-      allow delete: if isSuperAdmin();
+      // Xóa: Chỉ Admin có thể xóa reports
+      allow delete: if isAdmin();
+    }
+
+    // Rules cho collection maintenance_records
+    match /maintenance_records/{recordId} {
+      // Đọc: Manager trở lên có thể đọc maintenance records
+      allow read: if isAuthenticated() && 
+        (isManager() || isDirector() || isAdmin());
+      
+      // Tạo, cập nhật: Director trở lên có thể quản lý maintenance
+      allow write: if isAuthenticated() && 
+        (isDirector() || isAdmin());
+      
+      // Xóa: Chỉ Admin có thể xóa maintenance records
+      allow delete: if isAdmin();
     }
 
     // Rules mặc định: Từ chối tất cả các truy cập khác

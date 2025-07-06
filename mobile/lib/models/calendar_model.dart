@@ -233,9 +233,14 @@ class CalendarEvent {
 
   /// Tạo CalendarEvent từ MeetingModel
   static CalendarEvent fromMeeting(MeetingModel meeting) {
+    // Tạo title với thời gian để dễ nhìn trên calendar
+    String timeStr =
+        '${meeting.startTime.hour.toString().padLeft(2, '0')}:${meeting.startTime.minute.toString().padLeft(2, '0')}';
+    String displayTitle = '$timeStr ${meeting.title}';
+
     return CalendarEvent(
       id: 'meeting_${meeting.id}',
-      title: meeting.title,
+      title: displayTitle,
       description: meeting.description,
       type: CalendarEventType.meeting,
       priority: _convertMeetingPriority(meeting.priority),
@@ -251,6 +256,7 @@ class CalendarEvent {
         'meetingType': meeting.type.toString().split('.').last,
         'meetingStatus': meeting.status.toString().split('.').last,
         'locationType': meeting.locationType.toString().split('.').last,
+        'originalTitle': meeting.title, // Lưu title gốc
       },
       createdAt: meeting.createdAt,
       updatedAt: meeting.updatedAt,

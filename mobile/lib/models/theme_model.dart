@@ -476,7 +476,7 @@ class AppSettings {
   }
 
   /// Get font family string
-  String getFontFamilyString() {
+  String? getFontFamilyString() {
     switch (fontFamily) {
       case FontFamily.roboto:
         return 'Roboto';

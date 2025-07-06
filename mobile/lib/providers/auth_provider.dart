@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../models/user_model.dart';
 import '../models/user_role.dart';
+import '../utils/room_setup_helper.dart';
 
 class AuthProvider with ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -63,7 +64,7 @@ class AuthProvider with ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      // Bước 1: Chỉ tạo tài khoản trên Auth
+      // Bước 1: Tạo tài khoản trên Auth
       UserCredential userCredential =
           await _auth.createUserWithEmailAndPassword(
         email: email,
@@ -75,8 +76,13 @@ class AuthProvider with ChangeNotifier {
         await userCredential.user!.updateDisplayName(displayName);
       }
 
-      // Bước 2: Bỏ qua việc tạo hồ sơ ở đây.
-      // Việc này sẽ được thực hiện khi người dùng đăng nhập lần đầu.
+      // Bước 2: Tạo user profile trong Firestore (CHỈ NẾU CHƯA CÓ)
+      if (userCredential.user != null) {
+        await _createUserProfileIfNotExists(
+          userCredential.user!,
+          displayName: displayName,
+        );
+      }
 
       _user = userCredential.user;
     } on FirebaseAuthException catch (e) {
@@ -120,33 +126,19 @@ class AuthProvider with ChangeNotifier {
         password: password,
       );
 
-      // [LOGIC MỚI] Kiểm tra và tạo hồ sơ nếu cần
+      // Tạo hoặc cập nhật user profile
       if (userCredential.user != null) {
+        await _createUserProfileIfNotExists(userCredential.user!);
+
+        // Cập nhật lastLoginAt
         final userDocRef =
             _firestore.collection('users').doc(userCredential.user!.uid);
-        final docSnapshot = await userDocRef.get();
+        await userDocRef.update({
+          'lastLoginAt': FieldValue.serverTimestamp(),
+        });
 
-        if (!docSnapshot.exists) {
-          // Lần đăng nhập đầu tiên -> Tạo hồ sơ với role mặc định là guest, chưa được duyệt
-          await userDocRef.set({
-            'email': userCredential.user!.email,
-            'displayName': userCredential.user!.displayName ?? '',
-            'role': UserRole.guest.toString().split('.').last,
-            'createdAt': FieldValue.serverTimestamp(),
-            'lastLoginAt': FieldValue.serverTimestamp(),
-            'isActive': true,
-            'isRoleApproved': false, // Chưa được duyệt vai trò
-            'pendingRole': null,
-            'pendingDepartment': null,
-          });
-        } else {
-          // Các lần đăng nhập sau -> Cập nhật không cần chờ
-          userDocRef.update({
-            'lastLoginAt': FieldValue.serverTimestamp(),
-          }).catchError((e) {
-            print("Lỗi cập nhật lastLoginAt: $e");
-          });
-        }
+        // Setup rooms nếu user là admin và chưa có phòng
+        await _setupRoomsIfNeeded();
       }
 
       _user = userCredential.user;
@@ -211,32 +203,20 @@ class AuthProvider with ChangeNotifier {
       UserCredential userCredential =
           await _auth.signInWithCredential(credential);
 
-      // [KHÔI PHỤC] Lưu thông tin người dùng vào Firestore nếu là người dùng mới
+      // Tạo hoặc cập nhật user profile
       if (userCredential.user != null) {
+        await _createUserProfileIfNotExists(userCredential.user!);
+
+        // Cập nhật thông tin mới nhất
         final userDoc =
             _firestore.collection('users').doc(userCredential.user!.uid);
-        final docSnapshot = await userDoc.get();
+        await userDoc.update({
+          'lastLoginAt': FieldValue.serverTimestamp(),
+          'photoURL': userCredential.user!.photoURL,
+        });
 
-        if (!docSnapshot.exists) {
-          await userDoc.set({
-            'email': userCredential.user!.email,
-            'displayName': userCredential.user!.displayName,
-            'photoURL': userCredential.user!.photoURL,
-            'role': UserRole.guest.toString().split('.').last,
-            'createdAt': FieldValue.serverTimestamp(),
-            'lastLoginAt': FieldValue.serverTimestamp(),
-            'isActive': true,
-            'isRoleApproved': false, // Chưa được duyệt vai trò
-            'pendingRole': null,
-            'pendingDepartment': null,
-          });
-        } else {
-          await userDoc.update({
-            'lastLoginAt': FieldValue.serverTimestamp(),
-            'photoURL':
-                userCredential.user!.photoURL, // Cập nhật ảnh đại diện mới nhất
-          });
-        }
+        // Setup rooms nếu user là admin và chưa có phòng
+        await _setupRoomsIfNeeded();
       }
 
       _user = userCredential.user;
@@ -249,6 +229,123 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  /// TẠO USER PROFILE THÔNG MINH - KHÔNG OVERRIDE ROLES ĐÃ SETUP
+  Future<void> _createUserProfileIfNotExists(User user,
+      {String? displayName}) async {
+    try {
+      final userDocRef = _firestore.collection('users').doc(user.uid);
+      final docSnapshot = await userDocRef.get();
+
+      if (docSnapshot.exists) {
+        // User đã tồn tại -> KHÔNG thay đổi gì, giữ nguyên setup từ Firebase Console
+        print('✅ User profile đã tồn tại - giữ nguyên setup hiện tại');
+        return;
+      }
+
+      // User chưa tồn tại -> Tạo mới với role default
+      print('🆕 Tạo user profile mới với role mặc định');
+
+      await userDocRef.set({
+        'email': user.email,
+        'displayName': displayName ?? user.displayName ?? 'Người dùng',
+        'photoURL': user.photoURL,
+        'role': 'guest', // Role mặc định
+        'isRoleApproved': false, // Cần được phê duyệt
+        'pendingRole': null,
+        'pendingDepartment': null,
+        'departmentId': null,
+        'departmentName': null,
+        'teamIds': [],
+        'teamNames': [],
+        'managerId': null,
+        'managerName': null,
+        'isActive': true,
+        'createdAt': FieldValue.serverTimestamp(),
+        'lastLoginAt': FieldValue.serverTimestamp(),
+        'additionalData': {
+          'createdBy': 'system_auto',
+          'registrationMethod': user.providerData.isNotEmpty
+              ? user.providerData.first.providerId
+              : 'email',
+        },
+      });
+
+      print('✅ Đã tạo user profile với role guest');
+    } catch (e) {
+      print('❌ Lỗi tạo user profile: $e');
+      // Không throw error để không làm gián đoạn quá trình đăng nhập
+    }
+  }
+
+  /// Setup rooms nếu user là admin và chưa có phòng
+  Future<void> _setupRoomsIfNeeded() async {
+    try {
+      // Chờ một chút để userModel được load
+      await Future.delayed(const Duration(milliseconds: 500));
+      await _loadUserModel();
+
+      if (_userModel != null && _userModel!.isAdmin) {
+        // Kiểm tra đã có phòng chưa
+        final QuerySnapshot roomSnapshot =
+            await _firestore.collection('rooms').limit(1).get();
+
+        if (roomSnapshot.docs.isEmpty) {
+          print(
+              '🏗️ Admin đăng nhập lần đầu - thiết lập phòng họp mặc định...');
+
+          // Setup rooms cho admin
+          await RoomSetupHelper.setupDefaultRooms(_userModel!);
+
+          print('✅ Đã setup phòng họp mặc định cho admin');
+        }
+      }
+    } catch (e) {
+      print('⚠️ Lỗi setup rooms: $e');
+      // Không throw error để không làm gián đoạn đăng nhập
+    }
+  }
+
+  /// Tạo user và gán vai trò (chỉ Admin)
+  Future<void> createUserWithRole(String email, String displayName,
+      UserRole role, String? departmentId) async {
+    try {
+      if (_userModel == null || !_userModel!.isAdmin) {
+        throw Exception('Chỉ Admin mới có quyền tạo user');
+      }
+
+      // Tạo user document trong Firestore (không tạo auth account)
+      final userDoc = _firestore.collection('users').doc();
+
+      await userDoc.set({
+        'email': email,
+        'displayName': displayName,
+        'photoURL': null,
+        'role': role.toString().split('.').last,
+        'isRoleApproved': true, // Admin tạo -> tự động approve
+        'pendingRole': null,
+        'pendingDepartment': null,
+        'departmentId': departmentId,
+        'departmentName': null, // Sẽ được cập nhật sau
+        'teamIds': [],
+        'teamNames': [],
+        'managerId': null,
+        'managerName': null,
+        'isActive': true,
+        'createdAt': FieldValue.serverTimestamp(),
+        'lastLoginAt': null,
+        'additionalData': {
+          'createdBy': _userModel!.id,
+          'createdByAdmin': true,
+          'needsPasswordSetup': true,
+        },
+      });
+
+      print('✅ Đã tạo user $displayName với role ${role.toString()}');
+    } catch (e) {
+      throw Exception('Lỗi tạo user: $e');
+    }
+  }
+
   // Đăng xuất
   Future<void> logout() async {
     try {
@@ -256,8 +353,14 @@ class AuthProvider with ChangeNotifier {
       notifyListeners();
 
       await _auth.signOut();
+
+      // Clear tất cả user data
       _user = null;
+      _userModel = null;
+
+      print('✅ Đăng xuất thành công');
     } catch (e) {
+      print('❌ Lỗi đăng xuất: $e');
       throw Exception('Lỗi đăng xuất: $e');
     } finally {
       _isLoading = false;
@@ -324,17 +427,38 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  // Lấy tất cả người dùng (chỉ Admin)
+  // Lấy người dùng (Admin xem tất cả, Director chỉ xem phòng ban mình)
   Future<List<UserModel>> getAllUsers() async {
     try {
-      if (_userModel == null || !_userModel!.isAdmin) {
+      if (_userModel == null ||
+          (!_userModel!.isAdmin && !_userModel!.isDirector)) {
         throw Exception('Bạn không có quyền truy cập danh sách người dùng');
       }
 
-      QuerySnapshot snapshot = await _firestore.collection('users').get();
+      QuerySnapshot snapshot;
+
+      if (_userModel!.isAdmin) {
+        // Admin xem tất cả users
+        snapshot = await _firestore.collection('users').get();
+        print('🔑 Admin - Lấy tất cả ${snapshot.docs.length} users');
+      } else if (_userModel!.isDirector) {
+        // Director chỉ xem users trong department mình
+        if (_userModel!.departmentId == null) {
+          throw Exception('Director chưa được phân phòng ban');
+        }
+        snapshot = await _firestore
+            .collection('users')
+            .where('departmentId', isEqualTo: _userModel!.departmentId)
+            .get();
+        print(
+            '📂 Director - Lấy ${snapshot.docs.length} users trong department: ${_userModel!.departmentId}');
+      } else {
+        // Fallback: không có quyền
+        return <UserModel>[];
+      }
 
       if (snapshot.docs.isEmpty) {
-        return <UserModel>[]; // Trả về mảng rỗng thay vì null
+        return <UserModel>[]; // Trả về mảng rỗng
       }
 
       List<UserModel> users = [];
@@ -359,11 +483,19 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  // Thay đổi vai trò người dùng (chỉ Admin)
+  // Thay đổi vai trò người dùng (Admin và Director)
   Future<void> changeUserRole(String userId, UserRole newRole) async {
     try {
-      if (_userModel == null || !_userModel!.isAdmin) {
+      if (_userModel == null ||
+          (!_userModel!.isAdmin && !_userModel!.isDirector)) {
         throw Exception('Bạn không có quyền thay đổi vai trò');
+      }
+
+      // Director không được tạo Admin
+      if (_userModel!.isDirector &&
+          !_userModel!.isAdmin &&
+          newRole == UserRole.admin) {
+        throw Exception('Director không thể tạo Admin');
       }
 
       await _firestore.collection('users').doc(userId).update({
@@ -377,88 +509,149 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  // Tạo Admin đầu tiên (chỉ dùng một lần)
-  Future<void> createFirstAdmin() async {
-    try {
-      if (_user == null) {
-        throw Exception('Vui lòng đăng nhập trước');
-      }
-
-      // Kiểm tra xem đã có Admin chưa
-      QuerySnapshot adminSnapshot = await _firestore
-          .collection('users')
-          .where('role', isEqualTo: UserRole.admin.toString().split('.').last)
-          .get();
-
-      if (adminSnapshot.docs.isNotEmpty) {
-        throw Exception('Đã có Admin trong hệ thống');
-      }
-
-      // Tạo Admin
-      await _firestore.collection('users').doc(_user!.uid).update({
-        'role': UserRole.admin.toString().split('.').last,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      // Reload user model
-      await _loadUserModel();
-      notifyListeners();
-    } catch (e) {
-      throw Exception('Lỗi tạo Admin: $e');
-    }
-  }
-
-  // Backward compatibility
-  Future<void> createFirstSuperAdmin() async => createFirstAdmin();
-
-  // Chọn vai trò và phòng ban sau khi đăng ký hoặc đăng nhập lần đầu
-  Future<void> submitRoleAndDepartment({
-    required UserRole selectedRole,
-    required String? selectedDepartment,
-  }) async {
-    if (_user == null) throw Exception('Chưa đăng nhập');
-    final userDoc = _firestore.collection('users').doc(_user!.uid);
-    if (selectedRole == UserRole.guest) {
-      // Nếu chọn guest thì duyệt luôn
-      await userDoc.update({
-        'role': 'guest',
-        'departmentId': selectedDepartment,
-        'pendingRole': null,
-        'pendingDepartment': null,
-        'isRoleApproved': true,
-      });
-    } else {
-      // Nếu chọn vai trò khác thì chờ duyệt
-      await userDoc.update({
-        'pendingRole': selectedRole.toString().split('.').last,
-        'pendingDepartment': selectedDepartment,
-        'role': 'guest',
-        'isRoleApproved': false,
-      });
-    }
-    await _loadUserModel();
-    notifyListeners();
-  }
-
   // Lấy danh sách user chờ duyệt vai trò
   Future<List<UserModel>> getPendingUsers() async {
-    if (_userModel == null || !_userModel!.isAdmin) {
+    if (_userModel == null ||
+        (!_userModel!.isAdmin && !_userModel!.isDirector)) {
       throw Exception('Bạn không có quyền truy cập');
     }
-    QuerySnapshot snapshot = await _firestore
+
+    Query query = _firestore
         .collection('users')
         .where('isRoleApproved', isEqualTo: false)
-        .where('pendingRole', isNotEqualTo: null)
-        .get();
+        .where('pendingRole', isNotEqualTo: null);
+
+    // Nếu là Director, chỉ lấy users trong department mình
+    if (_userModel!.isDirector && !_userModel!.isAdmin) {
+      if (_userModel!.departmentId != null) {
+        query = query.where('pendingDepartment',
+            isEqualTo: _userModel!.departmentId);
+      } else {
+        // Nếu Director chưa có department, trả về empty
+        return [];
+      }
+    }
+
+    QuerySnapshot snapshot = await query.get();
     return snapshot.docs
         .map((doc) =>
             UserModel.fromMap(doc.data() as Map<String, dynamic>, doc.id))
         .toList();
   }
 
-  // Admin duyệt vai trò
+  // Lấy tất cả users trong department (cho Director)
+  Future<List<UserModel>> getUsersInDepartment([String? departmentId]) async {
+    if (_userModel == null ||
+        (!_userModel!.isAdmin && !_userModel!.isDirector)) {
+      throw Exception('Bạn không có quyền truy cập');
+    }
+
+    // Sử dụng departmentId được truyền vào hoặc department của user hiện tại
+    final targetDepartmentId = departmentId ?? _userModel!.departmentId;
+
+    if (targetDepartmentId == null) {
+      throw Exception('Không xác định được department');
+    }
+
+    QuerySnapshot snapshot = await _firestore
+        .collection('users')
+        .where('departmentId', isEqualTo: targetDepartmentId)
+        .get();
+
+    List<UserModel> users = [];
+    for (var doc in snapshot.docs) {
+      try {
+        final data = doc.data() as Map<String, dynamic>?;
+        if (data != null) {
+          final user = UserModel.fromMap(data, doc.id);
+          users.add(user);
+        }
+      } catch (e) {
+        print('Lỗi parse user ${doc.id}: $e');
+        continue;
+      }
+    }
+
+    return users;
+  }
+
+  // Director xóa user trong department mình
+  Future<void> deleteUserInDepartment(String userId) async {
+    if (_userModel == null ||
+        (!_userModel!.isAdmin && !_userModel!.isDirector)) {
+      throw Exception('Bạn không có quyền xóa user');
+    }
+
+    // Kiểm tra user tồn tại và trong department
+    final userDoc = await _firestore.collection('users').doc(userId).get();
+    if (!userDoc.exists) {
+      throw Exception('User không tồn tại');
+    }
+
+    final userData = userDoc.data() as Map<String, dynamic>;
+    final userDepartmentId = userData['departmentId'];
+
+    // Nếu là Director, chỉ được xóa user trong department mình
+    if (_userModel!.isDirector && !_userModel!.isAdmin) {
+      if (userDepartmentId != _userModel!.departmentId) {
+        throw Exception('Bạn chỉ có thể xóa user trong department của mình');
+      }
+    }
+
+    // Xóa user
+    await _firestore.collection('users').doc(userId).delete();
+    print('✅ Đã xóa user: ${userData['email']}');
+  }
+
+  // Director thay đổi role của user trong department mình
+  Future<void> changeUserRoleInDepartment(
+      String userId, UserRole newRole) async {
+    if (_userModel == null ||
+        (!_userModel!.isAdmin && !_userModel!.isDirector)) {
+      throw Exception('Bạn không có quyền thay đổi vai trò');
+    }
+
+    // Kiểm tra user tồn tại và trong department
+    final userDoc = await _firestore.collection('users').doc(userId).get();
+    if (!userDoc.exists) {
+      throw Exception('User không tồn tại');
+    }
+
+    final userData = userDoc.data() as Map<String, dynamic>;
+    final userDepartmentId = userData['departmentId'];
+
+    // Nếu là Director, chỉ được sửa user trong department mình
+    if (_userModel!.isDirector && !_userModel!.isAdmin) {
+      if (userDepartmentId != _userModel!.departmentId) {
+        throw Exception('Bạn chỉ có thể sửa user trong department của mình');
+      }
+      // Director không được promote thành Admin
+      if (newRole == UserRole.admin) {
+        throw Exception('Director không thể tạo Admin');
+      }
+    }
+
+    await _firestore.collection('users').doc(userId).update({
+      'role': newRole.toString().split('.').last,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    print(
+        '✅ Đã thay đổi role của ${userData['email']} thành ${newRole.toString()}');
+    notifyListeners();
+  }
+
+  // Admin và Director duyệt vai trò
   Future<void> approveUserRole(String userId) async {
-    if (_userModel == null || !_userModel!.isAdmin) {
+    // DEBUG: Kiểm tra user role hiện tại
+    print('🔍 DEBUG - Current user role: ${_userModel?.role}');
+    print('🔍 DEBUG - isAdmin: ${_userModel?.isAdmin}');
+    print('🔍 DEBUG - isDirector: ${_userModel?.isDirector}');
+    print('🔍 DEBUG - User ID: ${_userModel?.id}');
+    print('🔍 DEBUG - Approving user: $userId');
+
+    if (_userModel == null ||
+        (!_userModel!.isAdmin && !_userModel!.isDirector)) {
       throw Exception('Bạn không có quyền phê duyệt');
     }
     final userDoc = _firestore.collection('users').doc(userId);
@@ -468,18 +661,24 @@ class AuthProvider with ChangeNotifier {
     final pendingRole = data['pendingRole'];
     final pendingDepartment = data['pendingDepartment'];
     if (pendingRole == null) throw Exception('Không có vai trò chờ duyệt');
+
+    // Map departmentId thành departmentName
+    String? departmentName = _mapDepartmentIdToName(pendingDepartment);
+
     await userDoc.update({
       'role': pendingRole,
       'departmentId': pendingDepartment,
+      'departmentName': departmentName, // ← Thêm departmentName
       'pendingRole': null,
       'pendingDepartment': null,
       'isRoleApproved': true,
     });
   }
 
-  // Admin từ chối vai trò
+  // Admin và Director từ chối vai trò
   Future<void> rejectUserRole(String userId) async {
-    if (_userModel == null || !_userModel!.isAdmin) {
+    if (_userModel == null ||
+        (!_userModel!.isAdmin && !_userModel!.isDirector)) {
       throw Exception('Bạn không có quyền phê duyệt');
     }
     final userDoc = _firestore.collection('users').doc(userId);
@@ -489,5 +688,97 @@ class AuthProvider with ChangeNotifier {
       'role': 'guest',
       'isRoleApproved': true,
     });
+  }
+
+  /// Gửi yêu cầu vai trò và phòng ban (cho role selection screen)
+  Future<void> submitRoleAndDepartment(
+      UserRole role, String? departmentId) async {
+    try {
+      if (_user == null) throw Exception('Chưa đăng nhập');
+
+      await _firestore.collection('users').doc(_user!.uid).update({
+        'pendingRole': role.toString().split('.').last,
+        'pendingDepartment': departmentId,
+        'isRoleApproved': false,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      // Reload user model
+      await _loadUserModel();
+      notifyListeners();
+
+      print('✅ Đã gửi yêu cầu vai trò: ${role.toString()}');
+    } catch (e) {
+      throw Exception('Lỗi gửi yêu cầu vai trò: $e');
+    }
+  }
+
+  /// Hướng dẫn tạo Super Admin thủ công (không tự động tạo)
+  Future<void> createFirstSuperAdmin() async {
+    try {
+      print('📝 HƯỚNG DẪN TẠO SUPER ADMIN THỦ CÔNG:');
+      print('');
+      print('🔥 BƯỚC 1: TẠO USER TRÊN FIREBASE CONSOLE');
+      print('1. Mở Firebase Console: https://console.firebase.google.com');
+      print('2. Chọn project của bạn');
+      print('3. Vào Authentication > Users');
+      print('4. Nhấn "Add user" và nhập:');
+      print('   📧 Email: admin@meetingapp.com');
+      print('   🔑 Password: admin123456');
+      print('');
+      print('🎯 BƯỚC 2: TẠO USER PROFILE TRÊN FIRESTORE');
+      print('1. Vào Firestore Database > users collection');
+      print('2. Tạo document với UID giống User vừa tạo');
+      print('3. Nhập data:');
+      print('   {');
+      print('     "email": "admin@meetingapp.com",');
+      print('     "displayName": "Super Admin",');
+      print('     "role": "admin",');
+      print('     "isRoleApproved": true,');
+      print('     "isActive": true,');
+      print('     "createdAt": [timestamp],');
+      print('     "departmentId": "SYSTEM"');
+      print('   }');
+      print('');
+      print('✨ BƯỚC 3: ĐĂNG NHẬP VÀO APP');
+      print('- Email: admin@meetingapp.com');
+      print('- Password: admin123456');
+      print('');
+      print('⚠️ LƯU Ý: App sẽ KHÔNG tự động tạo admin nữa!');
+      print('Bạn cần setup thủ công trên Firebase Console.');
+
+      // Không tạo admin tự động nữa
+      throw Exception(
+          'Vui lòng setup Super Admin thủ công theo hướng dẫn trên console');
+    } catch (e) {
+      print('❌ $e');
+      rethrow;
+    }
+  }
+
+  /// Map departmentId thành tên phòng ban hiển thị
+  String? _mapDepartmentIdToName(String? departmentId) {
+    if (departmentId == null) return null;
+
+    // Map các department IDs thành tên hiển thị
+    const departmentMap = {
+      'Công nghệ thông tin': 'Công nghệ thông tin',
+      'Nhân sự': 'Nhân sự',
+      'Marketing': 'Marketing',
+      'Kế toán': 'Kế toán',
+      'Kinh doanh': 'Kinh doanh',
+      'Vận hành': 'Vận hành',
+      'Khác': 'Khác',
+      'SYSTEM': 'Hệ thống', // Cho Admin
+      'CNTT': 'Công nghệ thông tin', // Alias
+      'HR': 'Nhân sự', // Alias
+      'MARKETING': 'Marketing', // Alias
+      'ACCOUNTING': 'Kế toán', // Alias
+      'BUSINESS': 'Kinh doanh', // Alias
+      'OPERATIONS': 'Vận hành', // Alias
+    };
+
+    return departmentMap[departmentId] ??
+        departmentId; // Fallback to original ID
   }
 }

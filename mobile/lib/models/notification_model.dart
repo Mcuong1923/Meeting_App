@@ -1,7 +1,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'meeting_model.dart';
 
 /// Loại thông báo
 enum NotificationType {
+  info, // Thông tin chung
+  warning, // Cảnh báo
+  error, // Lỗi
+  success, // Thành công
+  reminder, // Nhắc nhở
+  meeting, // Cuộc họp
+  system, // Hệ thống
   meetingApproval, // Phê duyệt cuộc họp
   meetingApprovalResult, // Kết quả phê duyệt
   meetingReminder, // Nhắc nhở cuộc họp
@@ -10,7 +18,6 @@ enum NotificationType {
   meetingInvitation, // Mời tham gia cuộc họp
   roomMaintenance, // Bảo trì phòng
   roleChange, // Thay đổi vai trò
-  systemUpdate, // Cập nhật hệ thống
   general, // Thông báo chung
 }
 
@@ -41,6 +48,9 @@ class NotificationModel {
   final bool isDelivered;
   final DateTime? readAt;
   final DateTime? deliveredAt;
+  final String? meetingTitle;
+  final MeetingScope? meetingScope;
+  final String? targetAudience; // 'company', 'department:tech', 'team:dev_team'
 
   NotificationModel({
     required this.id,
@@ -60,6 +70,9 @@ class NotificationModel {
     this.isDelivered = false,
     this.readAt,
     this.deliveredAt,
+    this.meetingTitle,
+    this.meetingScope,
+    this.targetAudience,
   });
 
   factory NotificationModel.fromMap(Map<String, dynamic> map, String id) {
@@ -94,6 +107,15 @@ class NotificationModel {
       deliveredAt: map['deliveredAt'] != null
           ? (map['deliveredAt'] as Timestamp).toDate()
           : null,
+      meetingTitle: map['meetingTitle'],
+      meetingScope: map['meetingScope'] != null
+          ? MeetingScope.values.firstWhere(
+              (scope) =>
+                  scope.toString().split('.').last == map['meetingScope'],
+              orElse: () => MeetingScope.personal,
+            )
+          : null,
+      targetAudience: map['targetAudience'],
     );
   }
 
@@ -117,6 +139,9 @@ class NotificationModel {
       'readAt': readAt != null ? Timestamp.fromDate(readAt!) : null,
       'deliveredAt':
           deliveredAt != null ? Timestamp.fromDate(deliveredAt!) : null,
+      'meetingTitle': meetingTitle,
+      'meetingScope': meetingScope?.toString().split('.').last,
+      'targetAudience': targetAudience,
     };
   }
 
@@ -138,6 +163,9 @@ class NotificationModel {
     bool? isDelivered,
     DateTime? readAt,
     DateTime? deliveredAt,
+    String? meetingTitle,
+    MeetingScope? meetingScope,
+    String? targetAudience,
   }) {
     return NotificationModel(
       id: id ?? this.id,
@@ -157,6 +185,9 @@ class NotificationModel {
       isDelivered: isDelivered ?? this.isDelivered,
       readAt: readAt ?? this.readAt,
       deliveredAt: deliveredAt ?? this.deliveredAt,
+      meetingTitle: meetingTitle ?? this.meetingTitle,
+      meetingScope: meetingScope ?? this.meetingScope,
+      targetAudience: targetAudience ?? this.targetAudience,
     );
   }
 
@@ -186,10 +217,12 @@ class NotificationModel {
         return 'Bảo trì phòng';
       case NotificationType.roleChange:
         return 'Thay đổi vai trò';
-      case NotificationType.systemUpdate:
+      case NotificationType.system:
         return 'Cập nhật hệ thống';
       case NotificationType.general:
         return 'Thông báo chung';
+      default:
+        return 'Thông báo';
     }
   }
 

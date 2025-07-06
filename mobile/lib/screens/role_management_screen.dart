@@ -296,6 +296,24 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
           }).toList(),
         );
 
+        // Thêm nút xóa user
+        items.add(const PopupMenuDivider());
+        items.add(
+          PopupMenuItem(
+            value: 'delete',
+            child: Row(
+              children: [
+                const Icon(Icons.delete, color: Colors.red, size: 20),
+                const SizedBox(width: 8),
+                const Text(
+                  'Xóa thành viên',
+                  style: TextStyle(color: Colors.red),
+                ),
+              ],
+            ),
+          ),
+        );
+
         return items;
       },
       icon: const Icon(Icons.more_vert),
@@ -570,6 +588,9 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
         case 'reject':
           await _rejectUserRole(user, authProvider);
           break;
+        case 'delete':
+          await _deleteUser(user, authProvider);
+          break;
         default:
           if (action.startsWith('change_')) {
             final roleName = action.substring(7); // Bỏ "change_"
@@ -734,6 +755,81 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
               label: 'Thử lại',
               textColor: Colors.white,
               onPressed: () => _changeUserRole(user, newRole),
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteUser(UserModel user, AuthProvider authProvider) async {
+    if (!mounted) return;
+
+    // Kiểm tra không cho xóa chính mình
+    if (authProvider.userModel?.id == user.id) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Bạn không thể xóa chính mình!'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Hiển thị dialog xác nhận
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('⚠️ Xác nhận xóa thành viên'),
+        content: Text(
+          'Bạn có chắc chắn muốn xóa thành viên ${_getSafeDisplayName(user)} (${_getSafeEmail(user)})?\n\n'
+          'Tất cả dữ liệu của thành viên này sẽ bị xóa vĩnh viễn.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Hủy'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text(
+              'XÓA VĨNH VIỄN',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await authProvider.deleteUserInDepartment(user.id);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '✅ Đã xóa thành viên ${_getSafeDisplayName(user)}',
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+
+        // Reload user list
+        await _loadUsers();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Lỗi xóa thành viên: $e'),
+            backgroundColor: Colors.red,
+            action: SnackBarAction(
+              label: 'Thử lại',
+              textColor: Colors.white,
+              onPressed: () => _deleteUser(user, authProvider),
             ),
           ),
         );

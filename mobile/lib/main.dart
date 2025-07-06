@@ -16,9 +16,11 @@ import 'package:metting_app/screens/login_screen.dart';
 import 'package:metting_app/screens/welcome/welcome_screen.dart';
 import 'package:metting_app/screens/role_selection_screen.dart';
 import 'package:metting_app/screens/role_approval_screen.dart';
-import 'package:metting_app/utils/create_super_admin.dart';
+import 'package:metting_app/screens/calendar_screen.dart';
+import 'package:metting_app/screens/notification_screen.dart';
 import 'package:metting_app/utils/migrate_roles.dart';
 import 'package:metting_app/utils/room_setup_helper.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,31 +28,26 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // Tự động tạo Super Admin thô nếu chưa có và fix role format
+  // Initialize locale data for Vietnamese
+  await initializeDateFormatting('vi_VN', null);
+
+  // XÓA TẠO ADMIN TỰ ĐỘNG - ADMIN SẼ ĐƯỢC SETUP THỦ CÔNG
+  print('🎯 App started - Manual admin setup mode');
+
+  // XÓA MIGRATE ROLES - KHÔNG TỰ ĐỘNG THAY ĐỔI ROLES NỮA
+  print(
+      '⚠️ Migrate roles đã bị tắt - bạn control hoàn toàn roles trên Firebase Console');
+
+  // Setup rooms (sẽ được thực hiện khi có admin đăng nhập)
   try {
-    final hasSuperAdmin = await CreateSuperAdmin.hasSuperAdmin();
-    if (!hasSuperAdmin) {
-      await CreateSuperAdmin.createSuperAdminNow();
+    bool roomsSetup = await RoomSetupHelper.isRoomsSetupCompleted();
+    if (!roomsSetup) {
+      print('⚠️ Chưa có phòng họp - sẽ setup khi admin đăng nhập lần đầu');
     } else {
-      print('✅ Super Admin đã tồn tại, bỏ qua việc tạo mới');
-    }
-
-    // Migrate roles: superAdmin->admin, admin->director
-    await MigrateRoles.migrateAllRoles();
-
-    // Kiểm tra role sau khi migrate
-    await MigrateRoles.checkRolesAfterMigration();
-
-    // Auto setup phòng họp nếu chưa có (chỉ khi có admin)
-    print('🏗️ Kiểm tra setup phòng họp...');
-    final isRoomsSetup = await RoomSetupHelper.isRoomsSetupCompleted();
-    if (!isRoomsSetup) {
-      print('⏳ Chưa có phòng nào, sẽ setup sau khi có Admin đăng nhập');
-    } else {
-      print('✅ Phòng họp đã được setup');
+      print('✅ Rooms already setup');
     }
   } catch (e) {
-    print('⚠️ Không thể kiểm tra/tạo Super Admin: $e');
+    print('⚠️ Room setup check error: $e');
   }
 
   await SystemChrome.setPreferredOrientations([
@@ -88,6 +85,8 @@ class MyApp extends StatelessWidget {
           '/home': (context) => const HomeScreen(),
           '/role-selection': (context) => const RoleSelectionScreen(),
           '/role-approval': (context) => const RoleApprovalScreen(),
+          '/calendar': (context) => const CalendarScreen(),
+          '/notifications': (context) => const NotificationScreen(),
         },
       ),
     );

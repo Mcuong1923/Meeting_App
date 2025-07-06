@@ -4,6 +4,7 @@ import 'package:metting_app/models/analytics_model.dart';
 import 'package:metting_app/models/meeting_model.dart';
 import 'package:metting_app/models/user_model.dart';
 import 'package:metting_app/models/file_model.dart';
+import 'package:metting_app/models/user_role.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -207,10 +208,10 @@ class AnalyticsProvider extends ChangeNotifier {
         String status = meeting.status.toString().split('.').last;
         meetingsByStatus[status] = (meetingsByStatus[status] ?? 0) + 1;
 
-        String type = meeting.type ?? 'general';
+        String type = meeting.type.toString().split('.').last;
         meetingsByType[type] = (meetingsByType[type] ?? 0) + 1;
 
-        String room = meeting.roomName ?? 'Unknown';
+        String room = meeting.physicalLocation ?? 'Unknown';
         meetingsByRoom[room] = (meetingsByRoom[room] ?? 0) + 1;
       }
 

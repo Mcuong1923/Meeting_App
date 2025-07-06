@@ -7,6 +7,7 @@ import 'role_management_screen.dart';
 import 'setup_super_admin_screen.dart';
 import 'room_management_screen.dart';
 import 'room_setup_screen.dart';
+import 'role_approval_screen.dart';
 
 class AdminDashboardScreen extends StatelessWidget {
   const AdminDashboardScreen({Key? key}) : super(key: key);
@@ -127,7 +128,12 @@ class AdminDashboardScreen extends StatelessWidget {
                 icon: Icons.approval,
                 color: Colors.green,
                 onTap: () {
-                  Navigator.pushNamed(context, '/role-approval');
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const RoleApprovalScreen(),
+                    ),
+                  );
                 },
               ),
               const SizedBox(height: 12),

@@ -38,6 +38,10 @@ class CalendarProvider extends ChangeNotifier {
       startDate ??= DateTime.now().subtract(const Duration(days: 30));
       endDate ??= DateTime.now().add(const Duration(days: 60));
 
+      // Clear existing events để tránh duplicate
+      _events.clear();
+      _conflicts.clear();
+
       // Load meetings
       await _loadMeetingEvents(userId, startDate, endDate);
 
@@ -61,43 +65,39 @@ class CalendarProvider extends ChangeNotifier {
   Future<void> _loadMeetingEvents(
       String userId, DateTime startDate, DateTime endDate) async {
     try {
-      // Load meetings where user is creator or participant
-      QuerySnapshot creatorSnapshot = await _firestore
+      print('🔄 Loading meeting events for user: $userId');
+      print('🔄 Date range: $startDate to $endDate');
+
+      // Load all meetings trong time range
+      QuerySnapshot snapshot = await _firestore
           .collection('meetings')
-          .where('creatorId', isEqualTo: userId)
           .where('startTime',
               isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
           .where('startTime', isLessThanOrEqualTo: Timestamp.fromDate(endDate))
           .get();
+
+      print('🔄 Found ${snapshot.docs.length} meetings in time range');
 
       List<CalendarEvent> meetingEvents = [];
 
-      for (QueryDocumentSnapshot doc in creatorSnapshot.docs) {
-        MeetingModel meeting =
-            MeetingModel.fromMap(doc.data() as Map<String, dynamic>, doc.id);
-        meetingEvents.add(CalendarEvent.fromMeeting(meeting));
-      }
-
-      // Load meetings where user is participant
-      QuerySnapshot participantSnapshot = await _firestore
-          .collection('meetings')
-          .where('participants', arrayContains: {'userId': userId})
-          .where('startTime',
-              isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
-          .where('startTime', isLessThanOrEqualTo: Timestamp.fromDate(endDate))
-          .get();
-
-      for (QueryDocumentSnapshot doc in participantSnapshot.docs) {
+      for (QueryDocumentSnapshot doc in snapshot.docs) {
         MeetingModel meeting =
             MeetingModel.fromMap(doc.data() as Map<String, dynamic>, doc.id);
 
-        // Avoid duplicates
-        if (!meetingEvents.any((e) => e.meetingId == meeting.id)) {
-          meetingEvents.add(CalendarEvent.fromMeeting(meeting));
+        // Kiểm tra nếu user là creator hoặc participant
+        bool isCreator = meeting.creatorId == userId;
+        bool isParticipant =
+            meeting.participants.any((p) => p.userId == userId);
+
+        if (isCreator || isParticipant) {
+          CalendarEvent event = CalendarEvent.fromMeeting(meeting);
+          meetingEvents.add(event);
+          print('✅ Added meeting to calendar: ${meeting.title}');
         }
       }
 
       _events.addAll(meetingEvents);
+      print('✅ Loaded ${meetingEvents.length} meeting events for calendar');
     } catch (e) {
       print('❌ Error loading meeting events: $e');
     }

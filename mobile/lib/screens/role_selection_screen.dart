@@ -286,8 +286,8 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
     try {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       await authProvider.submitRoleAndDepartment(
-        selectedRole: _selectedRole!,
-        selectedDepartment: _selectedDepartment,
+        _selectedRole!,
+        _selectedDepartment,
       );
 
       if (mounted) {
@@ -302,7 +302,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
           SnackBar(
             content: Text(_selectedRole == UserRole.guest
                 ? 'Đã thiết lập vai trò thành công!'
-                : 'Đã gửi yêu cầu phê duyệt vai trò. Vui lòng chờ Super Admin xác nhận.'),
+                : 'Đã gửi yêu cầu phê duyệt vai trò. Vui lòng chờ  Admin xác nhận.'),
             backgroundColor: Colors.green,
           ),
         );

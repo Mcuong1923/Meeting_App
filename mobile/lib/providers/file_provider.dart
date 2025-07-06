@@ -3,9 +3,9 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:file_picker/file_picker.dart' hide FileType;
 import 'package:path_provider/path_provider.dart';
-import 'package:metting_app/models/file_model.dart' hide FileType;
+import 'package:metting_app/models/file_model.dart';
 import 'package:metting_app/models/user_model.dart';
 
 class FileProvider extends ChangeNotifier {
@@ -23,9 +23,9 @@ class FileProvider extends ChangeNotifier {
   String _currentPath = '/';
 
   // Getters
-  List<FileModels.FileModel> get files => _files;
-  List<FileModels.FolderModel> get folders => _folders;
-  List<FileModels.UploadProgress> get uploadProgresses => _uploadProgresses;
+  List<FileModel> get files => _files;
+  List<FolderModel> get folders => _folders;
+  List<UploadProgress> get uploadProgresses => _uploadProgresses;
   Map<String, File> get downloadedFiles => _downloadedFiles;
   bool get isLoading => _isLoading;
   String get error => _error;

@@ -5,6 +5,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:metting_app/models/notification_model.dart';
 import 'package:metting_app/models/user_model.dart';
 import 'package:metting_app/models/meeting_model.dart';
+import 'package:intl/intl.dart';
 
 class NotificationProvider extends ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -16,6 +17,13 @@ class NotificationProvider extends ChangeNotifier {
   bool _isLoading = false;
   String _error = '';
   int _unreadCount = 0;
+  bool _isInitialized = false;
+  String? _currentUserId;
+
+  // Constructor - tự động khởi tạo
+  NotificationProvider() {
+    _autoInitialize();
+  }
 
   // Getters
   List<NotificationModel> get notifications => _notifications;
@@ -23,13 +31,29 @@ class NotificationProvider extends ChangeNotifier {
       _notifications.where((n) => n.isUnread).toList();
   bool get isLoading => _isLoading;
   String get error => _error;
-  int get unreadCount => _unreadCount;
+  int get unreadCount => _notifications.where((n) => !n.isRead).length;
+
+  /// Tự động khởi tạo (gọi từ constructor)
+  Future<void> _autoInitialize() async {
+    if (_isInitialized) return;
+
+    try {
+      await _initializeLocalNotifications();
+      await _initializeFirebaseMessaging();
+      _isInitialized = true;
+      print('✅ NotificationProvider auto-initialized');
+    } catch (e) {
+      print('❌ Error auto-initializing notifications: $e');
+      _setError('Lỗi khởi tạo thông báo: $e');
+    }
+  }
 
   /// Khởi tạo notification system
   Future<void> initialize() async {
     try {
       await _initializeLocalNotifications();
       await _initializeFirebaseMessaging();
+      _isInitialized = true;
       print('✅ NotificationProvider initialized');
     } catch (e) {
       print('❌ Error initializing notifications: $e');
@@ -139,11 +163,28 @@ class NotificationProvider extends ChangeNotifier {
     // Handle navigation based on payload
   }
 
+  /// Load notifications cho user hiện tại (auto-detect user)
+  Future<void> loadNotificationsForCurrentUser() async {
+    try {
+      // Get current user from AuthProvider
+      // Sẽ được gọi từ UI với context
+      print('🔄 Loading notifications for current user...');
+    } catch (e) {
+      print('❌ Error loading notifications for current user: $e');
+    }
+  }
+
   /// Load notifications cho user
   Future<void> loadNotifications(String userId) async {
     try {
+      print(
+          '🔄 NotificationProvider.loadNotifications called for user: $userId');
       _setLoading(true);
       _setError('');
+      _currentUserId = userId; // Set current user ID
+      print('🔄 Current user ID set to: $_currentUserId');
+
+      print('🔄 Loading notifications for user: $userId');
 
       QuerySnapshot snapshot = await _firestore
           .collection('notifications')
@@ -158,9 +199,10 @@ class NotificationProvider extends ChangeNotifier {
           .toList();
 
       _updateUnreadCount();
+      print('🔄 Unread count after loading: $_unreadCount');
       notifyListeners();
 
-      print('✅ Loaded ${_notifications.length} notifications');
+      print('✅ Loaded ${_notifications.length} notifications for user $userId');
     } catch (e) {
       print('❌ Error loading notifications: $e');
       _setError('Lỗi tải thông báo: $e');
@@ -204,7 +246,7 @@ class NotificationProvider extends ChangeNotifier {
     }
   }
 
-  /// Đánh dấu đã đọc
+  /// Mark notification as read
   Future<void> markAsRead(String notificationId) async {
     try {
       await _firestore.collection('notifications').doc(notificationId).update({
@@ -212,48 +254,42 @@ class NotificationProvider extends ChangeNotifier {
         'readAt': FieldValue.serverTimestamp(),
       });
 
-      // Update local
+      // Update local state
       int index = _notifications.indexWhere((n) => n.id == notificationId);
       if (index != -1) {
         _notifications[index] = _notifications[index].copyWith(
           isRead: true,
           readAt: DateTime.now(),
         );
-        _updateUnreadCount();
         notifyListeners();
       }
-
-      print('✅ Marked notification as read: $notificationId');
     } catch (e) {
-      print('❌ Error marking as read: $e');
-      _setError('Lỗi đánh dấu đã đọc: $e');
+      print('❌ Error marking notification as read: $e');
     }
   }
 
-  /// Đánh dấu tất cả đã đọc
-  Future<void> markAllAsRead(String userId) async {
+  /// Mark all notifications as read
+  Future<void> markAllAsRead() async {
     try {
-      _setLoading(true);
+      final unreadNotifications =
+          _notifications.where((n) => !n.isRead).toList();
 
       WriteBatch batch = _firestore.batch();
-      QuerySnapshot unreadSnapshot = await _firestore
-          .collection('notifications')
-          .where('userId', isEqualTo: userId)
-          .where('isRead', isEqualTo: false)
-          .get();
-
-      for (QueryDocumentSnapshot doc in unreadSnapshot.docs) {
-        batch.update(doc.reference, {
-          'isRead': true,
-          'readAt': FieldValue.serverTimestamp(),
-        });
+      for (NotificationModel notification in unreadNotifications) {
+        batch.update(
+          _firestore.collection('notifications').doc(notification.id),
+          {
+            'isRead': true,
+            'readAt': FieldValue.serverTimestamp(),
+          },
+        );
       }
 
       await batch.commit();
 
-      // Update local
+      // Update local state
       for (int i = 0; i < _notifications.length; i++) {
-        if (_notifications[i].isUnread) {
+        if (!_notifications[i].isRead) {
           _notifications[i] = _notifications[i].copyWith(
             isRead: true,
             readAt: DateTime.now(),
@@ -261,15 +297,9 @@ class NotificationProvider extends ChangeNotifier {
         }
       }
 
-      _updateUnreadCount();
       notifyListeners();
-
-      print('✅ Marked all notifications as read');
     } catch (e) {
-      print('❌ Error marking all as read: $e');
-      _setError('Lỗi đánh dấu tất cả đã đọc: $e');
-    } finally {
-      _setLoading(false);
+      print('❌ Error marking all notifications as read: $e');
     }
   }
 
@@ -368,7 +398,7 @@ class NotificationProvider extends ChangeNotifier {
 
   /// Cập nhật số thông báo chưa đọc
   void _updateUnreadCount() {
-    _unreadCount = _notifications.where((n) => n.isUnread).length;
+    _unreadCount = _notifications.where((n) => !n.isRead).length;
   }
 
   /// Set loading state
@@ -414,6 +444,198 @@ class NotificationProvider extends ChangeNotifier {
         _setError('Lỗi lắng nghe thông báo: $error');
       },
     );
+  }
+
+  /// Gửi thông báo cuộc họp theo scope
+  Future<void> sendMeetingNotification(MeetingModel meeting) async {
+    try {
+      print('🔄 NotificationProvider: sendMeetingNotification started');
+      print('🔄 Meeting scope: ${meeting.scope}');
+      print('🔄 Current user ID: $_currentUserId');
+
+      List<String> targetUserIds = [];
+      String targetAudience = '';
+
+      // Xác định đối tượng nhận thông báo
+      switch (meeting.scope) {
+        case MeetingScope.company:
+          print('🔄 Getting company users...');
+          targetUserIds = await _getAllCompanyUsers();
+          targetAudience = 'company';
+          break;
+        case MeetingScope.department:
+          print(
+              '🔄 Getting department users for: ${meeting.targetDepartmentId}');
+          if (meeting.targetDepartmentId != null) {
+            targetUserIds =
+                await _getDepartmentUsers(meeting.targetDepartmentId!);
+            targetAudience = 'department:${meeting.targetDepartmentId}';
+          }
+          break;
+        case MeetingScope.team:
+          print('🔄 Getting team users for: ${meeting.targetTeamId}');
+          if (meeting.targetTeamId != null) {
+            targetUserIds = await _getTeamUsers(meeting.targetTeamId!);
+            targetAudience = 'team:${meeting.targetTeamId}';
+          }
+          break;
+        case MeetingScope.personal:
+          print('🔄 Getting participants...');
+          // Chỉ gửi cho participants
+          targetUserIds = meeting.participants.map((p) => p.userId).toList();
+          targetAudience = 'participants';
+          break;
+      }
+
+      print('🔄 Target users found: ${targetUserIds.length}');
+      print('🔄 Target user IDs: $targetUserIds');
+
+      // Luôn thêm creator vào danh sách nhận thông báo
+      if (!targetUserIds.contains(meeting.creatorId)) {
+        targetUserIds.add(meeting.creatorId);
+        print('🔄 Added creator to target users: ${meeting.creatorId}');
+      }
+
+      // Tạo thông báo cho mỗi user
+      for (String userId in targetUserIds) {
+        print('🔄 Creating notification for user: $userId');
+        await _createNotificationForUser(
+          userId: userId,
+          title: 'Cuộc họp mới: ${meeting.title}',
+          message: _generateMeetingMessage(meeting),
+          type: NotificationType.meeting,
+          meetingId: meeting.id,
+          meetingTitle: meeting.title,
+          meetingScope: meeting.scope,
+          targetAudience: targetAudience,
+        );
+      }
+
+      print('✅ Sent meeting notifications to ${targetUserIds.length} users');
+    } catch (e) {
+      print('❌ Error sending meeting notifications: $e');
+    }
+  }
+
+  Future<List<String>> _getAllCompanyUsers() async {
+    try {
+      print('🔄 Getting all company users...');
+      QuerySnapshot snapshot = await _firestore.collection('users').get();
+      List<String> userIds = snapshot.docs.map((doc) => doc.id).toList();
+      print('🔄 Found ${userIds.length} company users: $userIds');
+      return userIds;
+    } catch (e) {
+      print('❌ Error getting company users: $e');
+      return [];
+    }
+  }
+
+  Future<List<String>> _getDepartmentUsers(String departmentId) async {
+    try {
+      QuerySnapshot snapshot = await _firestore
+          .collection('users')
+          .where('departmentId', isEqualTo: departmentId)
+          .get();
+      return snapshot.docs.map((doc) => doc.id).toList();
+    } catch (e) {
+      print('❌ Error getting department users: $e');
+      return [];
+    }
+  }
+
+  Future<List<String>> _getTeamUsers(String teamId) async {
+    try {
+      QuerySnapshot snapshot = await _firestore
+          .collection('users')
+          .where('teams', arrayContains: teamId)
+          .get();
+      return snapshot.docs.map((doc) => doc.id).toList();
+    } catch (e) {
+      print('❌ Error getting team users: $e');
+      return [];
+    }
+  }
+
+  String _generateMeetingMessage(MeetingModel meeting) {
+    String scopeText = '';
+    switch (meeting.scope) {
+      case MeetingScope.company:
+        scopeText = 'toàn công ty';
+        break;
+      case MeetingScope.department:
+        scopeText = 'phòng ban';
+        break;
+      case MeetingScope.team:
+        scopeText = 'team';
+        break;
+      case MeetingScope.personal:
+        scopeText = 'cá nhân';
+        break;
+    }
+
+    String dateTime = DateFormat('dd/MM/yyyy HH:mm').format(meeting.startTime);
+    return 'Cuộc họp $scopeText được tổ chức vào $dateTime. Người tạo: ${meeting.creatorName}';
+  }
+
+  Future<void> _createNotificationForUser({
+    required String userId,
+    required String title,
+    required String message,
+    required NotificationType type,
+    String? meetingId,
+    String? meetingTitle,
+    MeetingScope? meetingScope,
+    String? targetAudience,
+  }) async {
+    try {
+      print('🔄 _createNotificationForUser for userId: $userId');
+      print('🔄 Current user ID: $_currentUserId');
+      print('🔄 Is current user: ${userId == _currentUserId}');
+
+      NotificationModel notification = NotificationModel(
+        id: '',
+        userId: userId,
+        title: title,
+        message: message,
+        type: type,
+        isRead: false,
+        createdAt: DateTime.now(),
+        meetingId: meetingId,
+        meetingTitle: meetingTitle,
+        meetingScope: meetingScope,
+        targetAudience: targetAudience,
+      );
+
+      print('🔄 Adding notification to Firestore...');
+      DocumentReference docRef = await _firestore
+          .collection('notifications')
+          .add(notification.toMap());
+      print('✅ Notification added to Firestore with ID: ${docRef.id}');
+
+      // Update local state ONLY if notification is for current user
+      if (userId == _currentUserId) {
+        print('🔄 Updating local state for current user...');
+        NotificationModel createdNotification =
+            notification.copyWith(id: docRef.id);
+        _notifications.insert(0, createdNotification);
+        print(
+            '🔄 Notifications count before update: ${_notifications.length - 1}');
+        print('🔄 Notifications count after update: ${_notifications.length}');
+
+        _updateUnreadCount();
+        print('🔄 Unread count after update: $_unreadCount');
+
+        notifyListeners();
+        print('✅ Updated local state for current user notification: $title');
+      } else {
+        print(
+            'ℹ️ Notification not for current user, skipping local state update');
+      }
+
+      print('✅ Created notification for user $userId: $title');
+    } catch (e) {
+      print('❌ Error creating notification for user $userId: $e');
+    }
   }
 
   /// Dispose

@@ -3,6 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/meeting_model.dart';
 import '../models/user_model.dart';
 import '../models/user_role.dart';
+import 'package:provider/provider.dart';
+import '../providers/notification_provider.dart';
 
 class MeetingProvider with ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -120,8 +122,8 @@ class MeetingProvider with ChangeNotifier {
   }
 
   // Tạo cuộc họp mới
-  Future<MeetingModel?> createMeeting(
-      MeetingModel meeting, UserModel currentUser) async {
+  Future<MeetingModel?> createMeeting(MeetingModel meeting,
+      UserModel currentUser, NotificationProvider? notificationProvider) async {
     try {
       _isLoading = true;
       _error = null;
@@ -161,6 +163,24 @@ class MeetingProvider with ChangeNotifier {
       // Gửi thông báo phê duyệt nếu cần
       if (newMeeting.isPending) {
         await _sendApprovalNotification(newMeeting, currentUser);
+      }
+
+      // Gửi notifications
+      print('🔄 MeetingProvider: Attempting to send notifications...');
+      print('🔄 NotificationProvider is null: ${notificationProvider == null}');
+      print(
+          '🔄 Meeting details: ${newMeeting.title}, scope: ${newMeeting.scope}');
+
+      if (notificationProvider != null) {
+        try {
+          print('🔄 Calling sendMeetingNotification...');
+          await notificationProvider.sendMeetingNotification(newMeeting);
+          print('✅ sendMeetingNotification completed');
+        } catch (e) {
+          print('❌ Error sending meeting notifications: $e');
+        }
+      } else {
+        print('❌ NotificationProvider is null!');
       }
 
       return newMeeting;

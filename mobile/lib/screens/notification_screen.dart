@@ -229,132 +229,63 @@ class _NotificationScreenState extends State<NotificationScreen>
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       child: Card(
-        elevation: notification.isUnread ? 3 : 1,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: notification.isUnread
-              ? BorderSide(color: kPrimaryColor.withOpacity(0.3), width: 1)
-              : BorderSide.none,
-        ),
-        child: InkWell(
-          onTap: () => _onNotificationTap(notification),
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header
-                Row(
-                  children: [
-                    _buildNotificationIcon(notification),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            notification.title,
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: notification.isUnread
-                                  ? FontWeight.bold
-                                  : FontWeight.w600,
-                              color: notification.isUnread
-                                  ? Colors.black87
-                                  : Colors.grey[700],
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              _buildPriorityChip(notification.priority),
-                              const SizedBox(width: 8),
-                              Text(
-                                notification.typeDisplayName,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          _formatTime(notification.createdAt),
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                        if (notification.isUnread) ...[
-                          const SizedBox(height: 4),
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              color: kPrimaryColor,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-
-                // Message
-                Text(
-                  notification.message,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: notification.isUnread
-                        ? Colors.black87
-                        : Colors.grey[600],
-                    height: 1.4,
-                  ),
-                ),
-
-                // Actions
-                if (notification.type == NotificationType.meetingApproval) ...[
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () =>
-                              _handleApprovalAction(notification, false),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.red,
-                            side: const BorderSide(color: Colors.red),
-                          ),
-                          child: const Text('Từ chối'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () =>
-                              _handleApprovalAction(notification, true),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
-                          ),
-                          child: const Text('Phê duyệt'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ],
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        color: notification.isRead ? null : Colors.blue.shade50,
+        child: ListTile(
+          leading: CircleAvatar(
+            backgroundColor: _getNotificationColor(notification.type),
+            child: Icon(
+              _getNotificationIcon(notification.type),
+              color: Colors.white,
+              size: 20,
             ),
           ),
+          title: Text(
+            notification.title,
+            style: TextStyle(
+              fontWeight:
+                  notification.isRead ? FontWeight.normal : FontWeight.bold,
+            ),
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(notification.message),
+              const SizedBox(height: 4),
+              Text(
+                DateFormat('dd/MM/yyyy HH:mm').format(notification.createdAt),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+          trailing: notification.isRead
+              ? null
+              : Container(
+                  width: 12,
+                  height: 12,
+                  decoration: const BoxDecoration(
+                    color: Colors.blue,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+          onTap: () async {
+            // Mark as read nếu chưa đọc
+            if (!notification.isRead) {
+              final provider =
+                  Provider.of<NotificationProvider>(context, listen: false);
+              await provider.markAsRead(notification.id);
+            }
+
+            // Navigate to related content nếu có
+            if (notification.meetingId != null) {
+              // Navigate to meeting detail
+              Navigator.pushNamed(
+                context,
+                '/meeting-detail',
+                arguments: notification.meetingId,
+              );
+            }
+          },
         ),
       ),
     );
@@ -397,7 +328,7 @@ class _NotificationScreenState extends State<NotificationScreen>
         icon = Icons.admin_panel_settings;
         color = Colors.indigo;
         break;
-      case NotificationType.systemUpdate:
+      case NotificationType.system:
         icon = Icons.system_update;
         color = Colors.cyan;
         break;
@@ -594,12 +525,49 @@ class _NotificationScreenState extends State<NotificationScreen>
   }
 
   void _markAllAsRead() {
-    final authProvider =
-        Provider.of<app_auth.AuthProvider>(context, listen: false);
     final provider = Provider.of<NotificationProvider>(context, listen: false);
+    provider.markAllAsRead();
+  }
 
-    if (authProvider.userModel != null) {
-      provider.markAllAsRead(authProvider.userModel!.id);
+  Color _getNotificationColor(NotificationType type) {
+    switch (type) {
+      case NotificationType.meeting:
+        return Colors.blue;
+      case NotificationType.warning:
+        return Colors.orange;
+      case NotificationType.error:
+        return Colors.red;
+      case NotificationType.success:
+        return Colors.green;
+      case NotificationType.reminder:
+        return Colors.purple;
+      case NotificationType.system:
+        return Colors.grey;
+      default:
+        return Colors.blue;
     }
+  }
+
+  IconData _getNotificationIcon(NotificationType type) {
+    switch (type) {
+      case NotificationType.meeting:
+        return Icons.event;
+      case NotificationType.warning:
+        return Icons.warning;
+      case NotificationType.error:
+        return Icons.error;
+      case NotificationType.success:
+        return Icons.check_circle;
+      case NotificationType.reminder:
+        return Icons.access_time;
+      case NotificationType.system:
+        return Icons.settings;
+      default:
+        return Icons.notifications;
+    }
+  }
+
+  void _showMarkAllAsReadDialog() {
+    // Implementation of _showMarkAllAsReadDialog method
   }
 }

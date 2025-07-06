@@ -19,6 +19,11 @@ class _RoomManagementScreenState extends State<RoomManagementScreen>
   late TabController _tabController;
   String _searchQuery = '';
   RoomStatus? _filterStatus;
+  List<RoomAmenity> _selectedAmenities = [];
+  int? _minCapacity;
+  int? _maxCapacity;
+  String? _selectedBuilding;
+  String? _selectedFloor;
 
   @override
   void initState() {
@@ -48,6 +53,7 @@ class _RoomManagementScreenState extends State<RoomManagementScreen>
         backgroundColor: Colors.blue.shade600,
         foregroundColor: Colors.white,
         elevation: 0,
+        automaticallyImplyLeading: false,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -500,6 +506,18 @@ class _RoomManagementScreenState extends State<RoomManagementScreen>
                 _buildFilterChip('Bảo trì', RoomStatus.maintenance),
                 const SizedBox(width: 8),
                 _buildFilterChip('Tạm ngưng', RoomStatus.disabled),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed: _showAdvancedFilters,
+                  icon: const Icon(Icons.filter_list, size: 16),
+                  label: const Text('Lọc nâng cao'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                ),
               ],
             ),
           ),
@@ -527,6 +545,11 @@ class _RoomManagementScreenState extends State<RoomManagementScreen>
     List<RoomModel> filteredRooms = roomProvider.searchRooms(
       keyword: _searchQuery,
       status: _filterStatus,
+      requiredAmenities: _selectedAmenities,
+      minCapacity: _minCapacity,
+      maxCapacity: _maxCapacity,
+      building: _selectedBuilding,
+      floor: _selectedFloor,
     );
 
     if (filteredRooms.isEmpty) {
@@ -1183,5 +1206,299 @@ class _RoomManagementScreenState extends State<RoomManagementScreen>
         );
       }
     }
+  }
+
+  void _showAdvancedFilters() {
+    showDialog(
+      context: context,
+      builder: (context) => _AdvancedFiltersDialog(
+        selectedAmenities: _selectedAmenities,
+        minCapacity: _minCapacity,
+        maxCapacity: _maxCapacity,
+        selectedBuilding: _selectedBuilding,
+        selectedFloor: _selectedFloor,
+        availableBuildings: context.read<RoomProvider>().buildings,
+        onFiltersApplied: (amenities, minCap, maxCap, building, floor) {
+          setState(() {
+            _selectedAmenities = amenities;
+            _minCapacity = minCap;
+            _maxCapacity = maxCap;
+            _selectedBuilding = building;
+            _selectedFloor = floor;
+          });
+        },
+      ),
+    );
+  }
+}
+
+// Advanced Filters Dialog
+class _AdvancedFiltersDialog extends StatefulWidget {
+  final List<RoomAmenity> selectedAmenities;
+  final int? minCapacity;
+  final int? maxCapacity;
+  final String? selectedBuilding;
+  final String? selectedFloor;
+  final List<String> availableBuildings;
+  final Function(List<RoomAmenity>, int?, int?, String?, String?)
+      onFiltersApplied;
+
+  const _AdvancedFiltersDialog({
+    Key? key,
+    required this.selectedAmenities,
+    this.minCapacity,
+    this.maxCapacity,
+    this.selectedBuilding,
+    this.selectedFloor,
+    required this.availableBuildings,
+    required this.onFiltersApplied,
+  }) : super(key: key);
+
+  @override
+  State<_AdvancedFiltersDialog> createState() => _AdvancedFiltersDialogState();
+}
+
+class _AdvancedFiltersDialogState extends State<_AdvancedFiltersDialog> {
+  late List<RoomAmenity> _selectedAmenities;
+  late int? _minCapacity;
+  late int? _maxCapacity;
+  late String? _selectedBuilding;
+  late String? _selectedFloor;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedAmenities = List.from(widget.selectedAmenities);
+    _minCapacity = widget.minCapacity;
+    _maxCapacity = widget.maxCapacity;
+    _selectedBuilding = widget.selectedBuilding;
+    _selectedFloor = widget.selectedFloor;
+  }
+
+  String _getAmenityDisplayName(RoomAmenity amenity) {
+    switch (amenity) {
+      case RoomAmenity.projector:
+        return 'Máy chiếu';
+      case RoomAmenity.whiteboard:
+        return 'Bảng trắng';
+      case RoomAmenity.wifi:
+        return 'WiFi';
+      case RoomAmenity.airConditioner:
+        return 'Điều hòa';
+      case RoomAmenity.microphone:
+        return 'Micro';
+      case RoomAmenity.speaker:
+        return 'Loa';
+      case RoomAmenity.camera:
+        return 'Camera';
+      case RoomAmenity.monitor:
+        return 'Màn hình';
+      case RoomAmenity.flipChart:
+        return 'Bảng giấy';
+      case RoomAmenity.waterDispenser:
+        return 'Cây nước';
+      case RoomAmenity.powerOutlet:
+        return 'Ổ cắm điện';
+      case RoomAmenity.videoConference:
+        return 'Thiết bị họp online';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Lọc nâng cao'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Amenities Section
+              const Text(
+                'Tiện ích',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: RoomAmenity.values.map((amenity) {
+                  final isSelected = _selectedAmenities.contains(amenity);
+                  return FilterChip(
+                    label: Text(_getAmenityDisplayName(amenity)),
+                    selected: isSelected,
+                    onSelected: (selected) {
+                      setState(() {
+                        if (selected) {
+                          _selectedAmenities.add(amenity);
+                        } else {
+                          _selectedAmenities.remove(amenity);
+                        }
+                      });
+                    },
+                    selectedColor: Colors.blue.withOpacity(0.2),
+                    checkmarkColor: Colors.blue,
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 20),
+
+              // Capacity Section
+              const Text(
+                'Sức chứa',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      decoration: const InputDecoration(
+                        labelText: 'Tối thiểu',
+                        border: OutlineInputBorder(),
+                        suffixText: 'người',
+                      ),
+                      keyboardType: TextInputType.number,
+                      onChanged: (value) {
+                        _minCapacity = int.tryParse(value);
+                      },
+                      controller: TextEditingController(
+                        text: _minCapacity?.toString() ?? '',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: TextField(
+                      decoration: const InputDecoration(
+                        labelText: 'Tối đa',
+                        border: OutlineInputBorder(),
+                        suffixText: 'người',
+                      ),
+                      keyboardType: TextInputType.number,
+                      onChanged: (value) {
+                        _maxCapacity = int.tryParse(value);
+                      },
+                      controller: TextEditingController(
+                        text: _maxCapacity?.toString() ?? '',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              // Building Section
+              const Text(
+                'Tòa nhà',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: _selectedBuilding,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  hintText: 'Chọn tòa nhà',
+                ),
+                items: [
+                  const DropdownMenuItem<String>(
+                    value: null,
+                    child: Text('Tất cả'),
+                  ),
+                  ...widget.availableBuildings.map((building) {
+                    return DropdownMenuItem<String>(
+                      value: building,
+                      child: Text(building),
+                    );
+                  }),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _selectedBuilding = value;
+                    _selectedFloor = null; // Reset floor when building changes
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
+
+              // Floor Section
+              if (_selectedBuilding != null) ...[
+                const Text(
+                  'Tầng',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Consumer<RoomProvider>(
+                  builder: (context, roomProvider, child) {
+                    final floors =
+                        roomProvider.getFloorsByBuilding(_selectedBuilding!);
+                    return DropdownButtonFormField<String>(
+                      value: _selectedFloor,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        hintText: 'Chọn tầng',
+                      ),
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: null,
+                          child: Text('Tất cả'),
+                        ),
+                        ...floors.map((floor) {
+                          return DropdownMenuItem<String>(
+                            value: floor,
+                            child: Text('Tầng $floor'),
+                          );
+                        }),
+                      ],
+                      onChanged: (value) {
+                        setState(() {
+                          _selectedFloor = value;
+                        });
+                      },
+                    );
+                  },
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () {
+            // Clear all filters
+            setState(() {
+              _selectedAmenities.clear();
+              _minCapacity = null;
+              _maxCapacity = null;
+              _selectedBuilding = null;
+              _selectedFloor = null;
+            });
+            widget.onFiltersApplied([], null, null, null, null);
+            Navigator.pop(context);
+          },
+          child: const Text('Xóa bộ lọc'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Hủy'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            widget.onFiltersApplied(
+              _selectedAmenities,
+              _minCapacity,
+              _maxCapacity,
+              _selectedBuilding,
+              _selectedFloor,
+            );
+            Navigator.pop(context);
+          },
+          child: const Text('Áp dụng'),
+        ),
+      ],
+    );
   }
 }

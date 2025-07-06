@@ -55,6 +55,7 @@ class _MeetingListScreenState extends State<MeetingListScreen>
         title: const Text('Danh sách cuộc họp'),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
+        automaticallyImplyLeading: false,
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: Colors.white,

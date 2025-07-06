@@ -15,6 +15,7 @@ import 'package:metting_app/components/menu_item.dart';
 import 'admin_dashboard_screen.dart';
 import 'notification_screen.dart';
 import 'package:metting_app/providers/notification_provider.dart';
+import 'calendar_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -40,6 +41,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // Kiểm tra xem user có cần chọn vai trò không
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkRoleSelection();
+      _loadNotifications();
     });
   }
 
@@ -48,6 +50,27 @@ class _HomeScreenState extends State<HomeScreen> {
         Provider.of<app_auth.AuthProvider>(context, listen: false);
     if (authProvider.needsRoleSelection) {
       Navigator.pushReplacementNamed(context, '/role-selection');
+    }
+  }
+
+  void _loadNotifications() {
+    final authProvider =
+        Provider.of<app_auth.AuthProvider>(context, listen: false);
+    final notificationProvider =
+        Provider.of<NotificationProvider>(context, listen: false);
+
+    print('🔄 Home: _loadNotifications called');
+    print(
+        '🔄 Home: AuthProvider user model is null: ${authProvider.userModel == null}');
+
+    if (authProvider.userModel != null) {
+      print(
+          '🔄 Home: Loading notifications for user ${authProvider.userModel!.id}');
+      print(
+          '🔄 Home: User display name: ${authProvider.userModel!.displayName}');
+      notificationProvider.loadNotifications(authProvider.userModel!.id);
+    } else {
+      print('⚠️ Home: No user model found, cannot load notifications');
     }
   }
 
@@ -307,6 +330,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final List<String> titles = [
       'Trang Chủ',
       'Cuộc Họp',
+      'Lịch',
       'Phòng Họp',
       'Cài Đặt'
     ];
@@ -331,6 +355,7 @@ class _HomeScreenState extends State<HomeScreen> {
         },
       ),
       const MeetingListScreen(),
+      const CalendarScreen(),
       const RoomManagementScreen(),
       const SettingsScreen(),
     ];
@@ -370,36 +395,21 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: [
           Consumer<NotificationProvider>(
             builder: (context, notificationProvider, child) {
+              final unreadCount = notificationProvider.unreadCount;
               return Stack(
                 children: [
                   IconButton(
-                    icon: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: kPrimaryColor.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(
-                        IconlyBold.notification,
-                        color: kPrimaryColor,
-                        size: 20,
-                      ),
-                    ),
+                    icon: const Icon(Icons.notifications),
                     onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const NotificationScreen(),
-                        ),
-                      );
+                      Navigator.pushNamed(context, '/notifications');
                     },
                   ),
-                  if (notificationProvider.unreadCount > 0)
+                  if (unreadCount > 0)
                     Positioned(
                       right: 6,
                       top: 6,
                       child: Container(
-                        padding: const EdgeInsets.all(4),
+                        padding: const EdgeInsets.all(2),
                         decoration: BoxDecoration(
                           color: Colors.red,
                           borderRadius: BorderRadius.circular(10),
@@ -409,9 +419,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           minHeight: 20,
                         ),
                         child: Text(
-                          notificationProvider.unreadCount > 99
-                              ? '99+'
-                              : notificationProvider.unreadCount.toString(),
+                          unreadCount > 99 ? '99+' : unreadCount.toString(),
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 12,
@@ -451,6 +459,11 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icon(IconlyLight.video),
             selectedIcon: Icon(IconlyBold.video),
             label: 'Cuộc Họp',
+          ),
+          NavigationDestination(
+            icon: Icon(IconlyLight.calendar),
+            selectedIcon: Icon(IconlyBold.calendar),
+            label: 'Lịch',
           ),
           NavigationDestination(
             icon: Icon(IconlyLight.work),

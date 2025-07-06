@@ -14,6 +14,22 @@ enum MeetingPriority {
   urgent,
 }
 
+/// Phạm vi cuộc họp
+enum MeetingScope {
+  personal, // Cá nhân
+  team, // Team
+  department, // Phòng ban
+  company, // Công ty
+}
+
+/// Trạng thái phê duyệt
+enum MeetingApprovalStatus {
+  pending, // Chờ duyệt
+  approved, // Đã duyệt
+  rejected, // Từ chối
+  auto_approved, // Tự động duyệt
+}
+
 class MeetingParticipant {
   final String userId;
   final String userName;
@@ -113,6 +129,14 @@ class MeetingModel {
   final bool recordMeeting;
   final bool requirePassword;
 
+  // Meeting scope and approval
+  final MeetingScope scope;
+  final MeetingApprovalStatus approvalStatus;
+  final String? targetDepartmentId;
+  final String? targetTeamId;
+  final String? approvedBy;
+  final String? rejectedReason;
+
   MeetingModel({
     required this.id,
     required this.title,
@@ -150,6 +174,12 @@ class MeetingModel {
     this.muteOnEntry = false,
     this.recordMeeting = false,
     this.requirePassword = false,
+    required this.scope,
+    required this.approvalStatus,
+    this.targetDepartmentId,
+    this.targetTeamId,
+    this.approvedBy,
+    this.rejectedReason,
   });
 
   factory MeetingModel.fromMap(Map<String, dynamic> map, String id) {
@@ -214,6 +244,21 @@ class MeetingModel {
       muteOnEntry: map['muteOnEntry'] ?? false,
       recordMeeting: map['recordMeeting'] ?? false,
       requirePassword: map['requirePassword'] ?? false,
+      scope: MeetingScope.values.firstWhere(
+        (scope) =>
+            scope.toString() == 'MeetingScope.${map['scope'] ?? 'personal'}',
+        orElse: () => MeetingScope.personal,
+      ),
+      approvalStatus: MeetingApprovalStatus.values.firstWhere(
+        (status) =>
+            status.toString() ==
+            'MeetingApprovalStatus.${map['approvalStatus'] ?? 'pending'}',
+        orElse: () => MeetingApprovalStatus.pending,
+      ),
+      targetDepartmentId: map['targetDepartmentId'],
+      targetTeamId: map['targetTeamId'],
+      approvedBy: map['approvedBy'],
+      rejectedReason: map['rejectedReason'],
     );
   }
 
@@ -257,6 +302,12 @@ class MeetingModel {
       'muteOnEntry': muteOnEntry,
       'recordMeeting': recordMeeting,
       'requirePassword': requirePassword,
+      'scope': scope.toString().split('.').last,
+      'approvalStatus': approvalStatus.toString().split('.').last,
+      'targetDepartmentId': targetDepartmentId,
+      'targetTeamId': targetTeamId,
+      'approvedBy': approvedBy,
+      'rejectedReason': rejectedReason,
     };
   }
 
@@ -297,6 +348,12 @@ class MeetingModel {
     bool? muteOnEntry,
     bool? recordMeeting,
     bool? requirePassword,
+    MeetingScope? scope,
+    MeetingApprovalStatus? approvalStatus,
+    String? targetDepartmentId,
+    String? targetTeamId,
+    String? approvedBy,
+    String? rejectedReason,
   }) {
     return MeetingModel(
       id: id ?? this.id,
@@ -336,6 +393,12 @@ class MeetingModel {
       muteOnEntry: muteOnEntry ?? this.muteOnEntry,
       recordMeeting: recordMeeting ?? this.recordMeeting,
       requirePassword: requirePassword ?? this.requirePassword,
+      scope: scope ?? this.scope,
+      approvalStatus: approvalStatus ?? this.approvalStatus,
+      targetDepartmentId: targetDepartmentId ?? this.targetDepartmentId,
+      targetTeamId: targetTeamId ?? this.targetTeamId,
+      approvedBy: approvedBy ?? this.approvedBy,
+      rejectedReason: rejectedReason ?? this.rejectedReason,
     );
   }
 

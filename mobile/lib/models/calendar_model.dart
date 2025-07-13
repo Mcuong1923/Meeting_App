@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:metting_app/models/meeting_model.dart';
-import 'package:metting_app/models/user_role.dart';
+import 'package:metting_app/models/user_role.dart' hide MeetingStatus;
 
 /// Loại sự kiện trong lịch
 enum CalendarEventType {

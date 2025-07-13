@@ -45,6 +45,9 @@ service cloud.firestore {
       // Đọc: User có thể đọc thông tin của chính mình, Admin có thể đọc tất cả
       allow read: if isOwner(userId) || isAdmin() || isDirector();
       
+      // List: Cho phép authenticated users list users để load departments/teams
+      allow list: if isAuthenticated();
+      
       // Tạo: User có thể tạo thông tin của chính mình
       allow create: if isOwner(userId) && isAuthenticated();
       

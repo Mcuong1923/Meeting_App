@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:metting_app/providers/auth_provider.dart' as app_auth;
+import 'package:metting_app/providers/meeting_provider.dart';
+import 'package:metting_app/providers/analytics_provider_simple.dart';
 import 'package:metting_app/models/user_role.dart';
+import 'package:metting_app/models/meeting_model.dart';
 import 'package:metting_app/screens/login_screen.dart';
 import 'package:metting_app/constants.dart';
 import 'package:flutter_zoom_drawer/flutter_zoom_drawer.dart';
@@ -16,6 +19,7 @@ import 'admin_dashboard_screen.dart';
 import 'notification_screen.dart';
 import 'package:metting_app/providers/notification_provider.dart';
 import 'calendar_screen.dart';
+import 'package:intl/intl.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -42,6 +46,7 @@ class _HomeScreenState extends State<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkRoleSelection();
       _loadNotifications();
+      _loadAllData();
     });
   }
 
@@ -71,6 +76,25 @@ class _HomeScreenState extends State<HomeScreen> {
       notificationProvider.loadNotifications(authProvider.userModel!.id);
     } else {
       print('⚠️ Home: No user model found, cannot load notifications');
+    }
+  }
+
+  void _loadAllData() {
+    final authProvider =
+        Provider.of<app_auth.AuthProvider>(context, listen: false);
+    final meetingProvider =
+        Provider.of<MeetingProvider>(context, listen: false);
+    final analyticsProvider =
+        Provider.of<SimpleAnalyticsProvider>(context, listen: false);
+
+    if (authProvider.userModel != null) {
+      // Load meeting data
+      meetingProvider.loadMeetings(authProvider.userModel!);
+
+      // Load analytics data
+      analyticsProvider.loadAnalytics();
+
+      print('✅ Home: Started loading all data');
     }
   }
 
@@ -154,8 +178,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           child: CircleAvatar(
                             radius: 30,
-                            backgroundImage: const NetworkImage(
-                              'https://i.pravatar.cc/150?u=a042581f4e29026704d',
+                            backgroundImage: NetworkImage(
+                              'https://i.pravatar.cc/150?u=${userModel?.email ?? 'default'}',
                             ),
                             backgroundColor: colorScheme.primaryContainer,
                           ),
@@ -502,344 +526,493 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // Helper function to get Vietnamese role name
+  String _getVietnameseRoleName(UserRole role) {
+    switch (role) {
+      case UserRole.admin:
+        return 'Quản trị viên';
+      case UserRole.director:
+        return 'Giám đốc';
+      case UserRole.manager:
+        return 'Quản lý';
+      case UserRole.employee:
+        return 'Nhân viên';
+      case UserRole.guest:
+        return 'Khách';
+      default:
+        return 'Nhân viên';
+    }
+  }
+
   Widget _buildUpcomingMeetingCard(String displayName) {
-    // This is the new card based on the user's image.
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: kAccentColor, // A nice blue/purple color
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: kAccentColor.withOpacity(0.3),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Top section: Doctor info and video call icon
-          Row(
-            children: [
-              const CircleAvatar(
-                radius: 30,
-                backgroundImage: NetworkImage(
-                    'https://i.pravatar.cc/150?u=a042581f4e29026704d'), // Placeholder image
+    return Consumer<app_auth.AuthProvider>(
+      builder: (context, authProvider, child) {
+        final userModel = authProvider.userModel;
+
+        // Handle display name - lấy từ email nếu displayName trống
+        String actualDisplayName = displayName;
+        if (userModel != null) {
+          if (userModel.displayName.trim().isNotEmpty) {
+            actualDisplayName = userModel.displayName;
+          } else if (userModel.email.isNotEmpty) {
+            // Lấy tên từ email (phần trước @)
+            actualDisplayName = userModel.email.split('@').first;
+          }
+        }
+
+        // Handle department and role
+        String departmentAndRole = '';
+        if (userModel != null) {
+          // Nếu chưa được duyệt thì hiển thị "Khách"
+          if (!userModel.isRoleApproved) {
+            departmentAndRole = 'Khách';
+          } else {
+            final roleName = _getVietnameseRoleName(userModel.role);
+            final departmentName = userModel.departmentName?.trim();
+
+            // Nếu có phòng ban thì hiển thị "Phòng ban • Vai trò", nếu không thì chỉ "Vai trò"
+            if (departmentName != null && departmentName.isNotEmpty) {
+              departmentAndRole = '$departmentName • $roleName';
+            } else {
+              departmentAndRole = roleName;
+            }
+          }
+        } else {
+          departmentAndRole = 'Khách';
+        }
+
+        return Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: kAccentColor, // A nice blue/purple color
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: kAccentColor.withOpacity(0.3),
+                blurRadius: 10,
+                offset: const Offset(0, 5),
               ),
-              const SizedBox(width: 15),
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Top section: User info and video call icon
+              Row(
                 children: [
-                  Text(
-                    'Mạnh Cường',
-                    style: TextStyle(
+                  CircleAvatar(
+                    radius: 30,
+                    backgroundImage: NetworkImage(
+                        'https://i.pravatar.cc/150?u=${userModel?.email ?? 'default'}'),
+                  ),
+                  const SizedBox(width: 15),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          actualDisplayName,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          departmentAndRole,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 15),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: const BoxDecoration(
                       color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
+                      shape: BoxShape.circle,
                     ),
-                  ),
-                  SizedBox(height: 5),
-                  Text(
-                    'Phenikaa',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 16,
+                    child: Icon(
+                      Icons.videocam_outlined,
+                      color: kAccentColor,
+                      size: 24,
                     ),
                   ),
                 ],
               ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.videocam_outlined,
-                  color: kAccentColor,
-                  size: 24,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 15),
-          const Divider(color: Colors.white24),
-          const SizedBox(height: 15),
+              const SizedBox(height: 15),
+              const Divider(color: Colors.white24),
+              const SizedBox(height: 15),
 
-          // Middle section: Date and Time
-          const Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
+              // Middle section: Date and Time
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Icon(Icons.calendar_today_outlined,
-                      color: Colors.white70, size: 20),
-                  SizedBox(width: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  Row(
                     children: [
-                      Text('Date', style: TextStyle(color: Colors.white70)),
-                      SizedBox(height: 2),
-                      Text('18 Nov, Monday',
-                          style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold)),
+                      const Icon(Icons.calendar_today_outlined,
+                          color: Colors.white70, size: 20),
+                      const SizedBox(width: 10),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Date',
+                              style: TextStyle(color: Colors.white70)),
+                          const SizedBox(height: 2),
+                          Text(
+                            DateFormat('dd MMM, EEEE', 'vi_VN')
+                                .format(DateTime.now()),
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      const Icon(Icons.access_time_filled_outlined,
+                          color: Colors.white70, size: 20),
+                      const SizedBox(width: 10),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Time',
+                              style: TextStyle(color: Colors.white70)),
+                          const SizedBox(height: 2),
+                          Text(
+                            DateFormat('HH:mm').format(DateTime.now()),
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ],
               ),
+              const SizedBox(height: 20),
+
+              // Bottom section: Buttons
               Row(
                 children: [
-                  Icon(Icons.access_time_filled_outlined,
-                      color: Colors.white70, size: 20),
-                  SizedBox(width: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Time', style: TextStyle(color: Colors.white70)),
-                      SizedBox(height: 2),
-                      Text('8pm - 8:30 pm',
-                          style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold)),
-                    ],
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () {
+                        // Navigate to create meeting screen
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const MeetingCreateScreen(),
+                          ),
+                        );
+                      },
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        side: const BorderSide(color: Colors.white54),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        'Cuộc Họp Mới',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 15),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        // Navigate to meeting list screen
+                        setState(() {
+                          _selectedIndex = 1; // Switch to meeting list tab
+                        });
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: kAccentColor,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text('Cuộc Họp Gần Đây'),
+                    ),
                   ),
                 ],
               ),
             ],
           ),
-          const SizedBox(height: 20),
-
-          // Bottom section: Buttons
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () {},
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    side: const BorderSide(color: Colors.white54),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const Text(
-                    'Cuộc Họp Mới',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 15),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () {},
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: kAccentColor,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const Text('Cuộc Họp Gần Đây'),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
   Widget _buildDashboardSection() {
-    final cardData = [
-      {
-        'icon': Icons.calendar_today_outlined,
-        'title': 'Hôm nay',
-        'value': '2',
-        'subtitle': 'cuộc họp',
-        'color': Colors.blue,
-        'iconBackground': Colors.blue.withOpacity(0.1),
-      },
-      {
-        'icon': Icons.upcoming_outlined,
-        'title': 'Sắp tới',
-        'value': '5',
-        'subtitle': 'cuộc họp',
-        'color': Colors.orange,
-        'iconBackground': Colors.orange.withOpacity(0.1),
-      },
-      {
-        'icon': Icons.check_circle_outline,
-        'title': 'Hoàn thành',
-        'value': '12',
-        'subtitle': 'cuộc họp',
-        'color': Colors.green,
-        'iconBackground': Colors.green.withOpacity(0.1),
-      },
-      {
-        'icon': Icons.people_outline,
-        'title': 'Tổng tham gia',
-        'value': '48',
-        'subtitle': 'người',
-        'color': Colors.purple,
-        'iconBackground': Colors.purple.withOpacity(0.1),
-      },
-    ];
+    return Consumer<MeetingProvider>(
+      builder: (context, meetingProvider, child) {
+        // Calculate real statistics from meetings
+        final meetings = meetingProvider.meetings;
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        final tomorrow = today.add(const Duration(days: 1));
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        // Today's meetings
+        final todayMeetings = meetings.where((meeting) {
+          final meetingDate = DateTime(
+            meeting.startTime.year,
+            meeting.startTime.month,
+            meeting.startTime.day,
+          );
+          return meetingDate.isAtSameMomentAs(today);
+        }).toList();
+
+        // Upcoming meetings (next 7 days)
+        final upcomingMeetings = meetings.where((meeting) {
+          return meeting.startTime.isAfter(now) &&
+              meeting.startTime.isBefore(now.add(const Duration(days: 7))) &&
+              meeting.isApproved;
+        }).toList();
+
+        // Completed meetings
+        final completedMeetings = meetings.where((meeting) {
+          return meeting.isCompleted;
+        }).toList();
+
+        // Total participants (unique count from all meetings)
+        final Set<String> uniqueParticipants = {};
+        for (var meeting in meetings) {
+          for (var participant in meeting.participants) {
+            uniqueParticipants.add(participant.userId);
+          }
+        }
+
+        final cardData = [
+          {
+            'icon': Icons.calendar_today_outlined,
+            'title': 'Hôm nay',
+            'value': todayMeetings.length.toString(),
+            'subtitle': 'cuộc họp',
+            'color': Colors.blue,
+            'iconBackground': Colors.blue.withOpacity(0.1),
+            'onTap': () => _navigateToTodayMeetings(),
+          },
+          {
+            'icon': Icons.upcoming_outlined,
+            'title': 'Sắp tới',
+            'value': upcomingMeetings.length.toString(),
+            'subtitle': 'cuộc họp',
+            'color': Colors.orange,
+            'iconBackground': Colors.orange.withOpacity(0.1),
+            'onTap': () => _navigateToUpcomingMeetings(),
+          },
+          {
+            'icon': Icons.check_circle_outline,
+            'title': 'Hoàn thành',
+            'value': completedMeetings.length.toString(),
+            'subtitle': 'cuộc họp',
+            'color': Colors.green,
+            'iconBackground': Colors.green.withOpacity(0.1),
+            'onTap': () => _navigateToCompletedMeetings(),
+          },
+          {
+            'icon': Icons.people_outline,
+            'title': 'Tổng tham gia',
+            'value': uniqueParticipants.length.toString(),
+            'subtitle': 'người',
+            'color': Colors.purple,
+            'iconBackground': Colors.purple.withOpacity(0.1),
+            'onTap': () => _navigateToParticipantsAnalytics(),
+          },
+        ];
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Tổng quan',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: kPrimaryLightColor.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.calendar_month, size: 16, color: kPrimaryColor),
-                  SizedBox(width: 4),
-                  Text(
-                    'Tháng này',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: kPrimaryColor,
-                      fontWeight: FontWeight.w600,
-                    ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Tổng quan',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
                   ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        SizedBox(
-          height: 160, // Adjusted height
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            itemCount: cardData.length,
-            clipBehavior: Clip.none, // To prevent shadow clipping
-            itemBuilder: (context, index) {
-              final card = cardData[index];
-              // Calculate width to show ~3 items
-              final screenWidth = MediaQuery.of(context).size.width;
-              final cardWidth = screenWidth / 3.5;
-
-              return Container(
-                width: cardWidth,
-                // Add left margin for all cards except the first
-                margin: EdgeInsets.only(left: index == 0 ? 0 : 12),
-                child: _DashboardCard(
-                  icon: card['icon'] as IconData,
-                  title: card['title'] as String,
-                  value: card['value'] as String,
-                  subtitle: card['subtitle'] as String,
-                  color: card['color'] as Color,
-                  iconBackground: card['iconBackground'] as Color,
                 ),
-              );
-            },
-          ),
-        ),
-      ],
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: kPrimaryLightColor.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.calendar_month,
+                          size: 16, color: kPrimaryColor),
+                      SizedBox(width: 4),
+                      Text(
+                        'Tháng này',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: kPrimaryColor,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (meetingProvider.isLoading)
+              Container(
+                height: 160,
+                child: const Center(
+                  child: CircularProgressIndicator(),
+                ),
+              )
+            else
+              SizedBox(
+                height: 160, // Adjusted height
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  itemCount: cardData.length,
+                  clipBehavior: Clip.none, // To prevent shadow clipping
+                  itemBuilder: (context, index) {
+                    final card = cardData[index];
+                    // Calculate width to show ~3 items
+                    final screenWidth = MediaQuery.of(context).size.width;
+                    final cardWidth = screenWidth / 3.5;
+
+                    return Container(
+                      width: cardWidth,
+                      // Add left margin for all cards except the first
+                      margin: EdgeInsets.only(left: index == 0 ? 0 : 12),
+                      child: _DashboardCard(
+                        icon: card['icon'] as IconData,
+                        title: card['title'] as String,
+                        value: card['value'] as String,
+                        subtitle: card['subtitle'] as String,
+                        color: card['color'] as Color,
+                        iconBackground: card['iconBackground'] as Color,
+                        onTap: card['onTap'] as VoidCallback,
+                      ),
+                    );
+                  },
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 
   Widget _buildRecentMeetingsSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Consumer<MeetingProvider>(
+      builder: (context, meetingProvider, child) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Cuộc họp gần đây',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
-              ),
-            ),
-            TextButton(
-              onPressed: () {
-                setState(() {
-                  _selectedIndex = 1;
-                });
-              },
-              child: const Text(
-                'Xem tất cả',
-                style: TextStyle(
-                  color: const Color(0xFF7B61FF),
-                  fontWeight: FontWeight.w600,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Cuộc họp gần đây',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
                 ),
-              ),
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _selectedIndex = 1;
+                    });
+                  },
+                  child: const Text(
+                    'Xem tất cả',
+                    style: TextStyle(
+                      color: Color(0xFF7B61FF),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
             ),
+            const SizedBox(height: 16),
+            // Danh sách cuộc họp gần đây từ database
+            if (meetingProvider.isLoading)
+              const Center(
+                child: CircularProgressIndicator(),
+              )
+            else if (meetingProvider.meetings.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(32),
+                child: const Center(
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.meeting_room_outlined,
+                        size: 64,
+                        color: Colors.grey,
+                      ),
+                      SizedBox(height: 16),
+                      Text(
+                        'Chưa có cuộc họp nào',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: meetingProvider.meetings.length > 3
+                    ? 3
+                    : meetingProvider.meetings.length,
+                itemBuilder: (context, index) {
+                  final meeting = meetingProvider.meetings[index];
+                  return _buildMeetingCard(meeting);
+                },
+              ),
           ],
-        ),
-        const SizedBox(height: 16),
-        // Danh sách cuộc họp gần đây
-        ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: 3, // Hiển thị 3 cuộc họp gần nhất
-          itemBuilder: (context, index) {
-            return _buildMeetingCard(index);
-          },
-        ),
-      ],
+        );
+      },
     );
   }
 
-  Widget _buildMeetingCard(int index) {
-    // Data mẫu cho cuộc họp
-    final meetings = [
-      {
-        'title': 'Họp team phát triển',
-        'time': '09:00 - 10:00',
-        'date': 'Hôm nay',
-        'room': 'Phòng họp A',
-        'participants': 8,
-        'status': 'upcoming',
-      },
-      {
-        'title': 'Review dự án Q4',
-        'time': '14:00 - 15:30',
-        'date': 'Hôm nay',
-        'room': 'Phòng họp B',
-        'participants': 12,
-        'status': 'upcoming',
-      },
-      {
-        'title': 'Họp khách hàng ABC',
-        'time': '10:00 - 11:00',
-        'date': 'Hôm qua',
-        'room': 'Phòng họp VIP',
-        'participants': 5,
-        'status': 'completed',
-      },
-    ];
+  Widget _buildMeetingCard(MeetingModel meeting) {
+    final isCompleted = meeting.isCompleted;
+    final isUpcoming = meeting.isUpcoming;
+    final isOngoing = meeting.isOngoing;
 
-    if (index >= meetings.length) return const SizedBox();
-
-    final meeting = meetings[index];
-    final isCompleted = meeting['status'] == 'completed';
+    String statusText = 'Đã hoàn thành';
+    if (isOngoing) {
+      statusText = 'Đang diễn ra';
+    } else if (isUpcoming) {
+      statusText = 'Sắp diễn ra';
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -857,7 +1030,8 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         child: InkWell(
           onTap: () {
-            // TODO: Xem chi tiết cuộc họp
+            // Navigate to meeting detail screen
+            _navigateToMeetingDetail(meeting.id);
           },
           borderRadius: BorderRadius.circular(16),
           child: Padding(
@@ -871,12 +1045,18 @@ class _HomeScreenState extends State<HomeScreen> {
                   decoration: BoxDecoration(
                     color: isCompleted
                         ? Colors.grey.shade100
-                        : kPrimaryColor.withOpacity(0.1),
+                        : (isOngoing
+                            ? Colors.green.withOpacity(0.1)
+                            : kPrimaryColor.withOpacity(0.1)),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
-                    isCompleted ? Icons.check_circle : Icons.videocam,
-                    color: isCompleted ? Colors.grey : kPrimaryColor,
+                    isCompleted
+                        ? Icons.check_circle
+                        : (isOngoing ? Icons.video_call : Icons.videocam),
+                    color: isCompleted
+                        ? Colors.grey
+                        : (isOngoing ? Colors.green : kPrimaryColor),
                     size: 24,
                   ),
                 ),
@@ -887,12 +1067,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        meeting['title'] as String,
+                        meeting.title,
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
                           color: isCompleted ? Colors.grey : Colors.black87,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 8),
                       Row(
@@ -904,7 +1086,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            '${meeting['time']} • ${meeting['date']}',
+                            '${DateFormat('HH:mm').format(meeting.startTime)} - ${DateFormat('HH:mm').format(meeting.endTime)} • ${DateFormat('dd/MM').format(meeting.startTime)}',
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.grey.shade600,
@@ -916,16 +1098,25 @@ class _HomeScreenState extends State<HomeScreen> {
                       Row(
                         children: [
                           Icon(
-                            Icons.location_on_outlined,
+                            meeting.isVirtual
+                                ? Icons.video_call_outlined
+                                : Icons.location_on_outlined,
                             size: 14,
                             color: Colors.grey.shade600,
                           ),
                           const SizedBox(width: 4),
-                          Text(
-                            meeting['room'] as String,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade600,
+                          Expanded(
+                            child: Text(
+                              meeting.isVirtual
+                                  ? 'Trực tuyến'
+                                  : (meeting.physicalLocation ??
+                                      'Chưa có địa điểm'),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           const SizedBox(width: 16),
@@ -936,7 +1127,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            '${meeting['participants']} người',
+                            '${meeting.participantCount} người',
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.grey.shade600,
@@ -955,14 +1146,16 @@ class _HomeScreenState extends State<HomeScreen> {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: kPrimaryColor.withOpacity(0.1),
+                      color: isOngoing
+                          ? Colors.green.withOpacity(0.1)
+                          : kPrimaryColor.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: const Text(
-                      'Sắp diễn ra',
+                    child: Text(
+                      statusText,
                       style: TextStyle(
                         fontSize: 12,
-                        color: kPrimaryColor,
+                        color: isOngoing ? Colors.green : kPrimaryColor,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -974,6 +1167,147 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
+  // Navigation methods
+  void _navigateToTodayMeetings() {
+    setState(() {
+      _selectedIndex = 1; // Switch to meeting list tab
+    });
+    // Show snackbar to indicate filter
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Hiển thị cuộc họp hôm nay'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _navigateToUpcomingMeetings() {
+    setState(() {
+      _selectedIndex = 1; // Switch to meeting list tab
+    });
+    // Show snackbar to indicate filter
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Hiển thị cuộc họp sắp tới'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _navigateToCompletedMeetings() {
+    setState(() {
+      _selectedIndex = 1; // Switch to meeting list tab
+    });
+    // Show snackbar to indicate filter
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Hiển thị cuộc họp đã hoàn thành'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _navigateToParticipantsAnalytics() {
+    final meetingProvider =
+        Provider.of<MeetingProvider>(context, listen: false);
+    final meetings = meetingProvider.meetings;
+
+    // Calculate real statistics
+    final Set<String> uniqueParticipants = {};
+    int totalParticipants = 0;
+    int confirmedParticipants = 0;
+
+    for (var meeting in meetings) {
+      for (var participant in meeting.participants) {
+        uniqueParticipants.add(participant.userId);
+        totalParticipants++;
+        if (participant.hasConfirmed) {
+          confirmedParticipants++;
+        }
+      }
+    }
+
+    final avgParticipants =
+        meetings.isNotEmpty ? (totalParticipants / meetings.length).round() : 0;
+    final confirmationRate = totalParticipants > 0
+        ? ((confirmedParticipants / totalParticipants) * 100).round()
+        : 0;
+
+    // Show analytics dialog with real data
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Thống kê tham gia'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('📊 Tổng số người tham gia: ${uniqueParticipants.length}'),
+            const SizedBox(height: 8),
+            Text('👥 Trung bình mỗi cuộc họp: $avgParticipants người'),
+            const SizedBox(height: 8),
+            Text('📈 Tổng số cuộc họp: ${meetings.length}'),
+            const SizedBox(height: 8),
+            Text('⭐ Tỷ lệ xác nhận: $confirmationRate%'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Đóng'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // Navigate to detailed analytics (placeholder)
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Tính năng thống kê chi tiết đang phát triển'),
+                ),
+              );
+            },
+            child: const Text('Xem chi tiết'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _navigateToMeetingDetail(String meetingId) {
+    // For demo, check if meeting detail screen exists
+    try {
+      Navigator.pushNamed(
+        context,
+        '/meeting-detail',
+        arguments: meetingId,
+      );
+    } catch (e) {
+      // Fallback if meeting detail screen not properly set up
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Chi tiết cuộc họp'),
+          content: Text('Đang mở chi tiết cuộc họp: $meetingId'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Đóng'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                setState(() {
+                  _selectedIndex = 1; // Switch to meeting list tab
+                });
+              },
+              child: const Text('Xem danh sách'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
 }
 
 class _DashboardCard extends StatelessWidget {
@@ -983,6 +1317,8 @@ class _DashboardCard extends StatelessWidget {
   final String subtitle;
   final Color color;
   final Color iconBackground;
+  final VoidCallback onTap;
+
   const _DashboardCard({
     required this.icon,
     required this.title,
@@ -990,7 +1326,9 @@ class _DashboardCard extends StatelessWidget {
     required this.subtitle,
     required this.color,
     required this.iconBackground,
+    required this.onTap,
   });
+
   @override
   Widget build(BuildContext context) {
     return Material(
@@ -1000,7 +1338,7 @@ class _DashboardCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         splashColor: color.withOpacity(0.1),
         highlightColor: color.withOpacity(0.05),
-        onTap: () {}, // TODO: Thêm chức năng khi nhấn nếu cần
+        onTap: onTap,
         child: Container(
           decoration: BoxDecoration(
             color: Colors.white,

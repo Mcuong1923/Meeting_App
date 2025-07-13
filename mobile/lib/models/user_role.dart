@@ -1,3 +1,5 @@
+import 'meeting_model.dart';
+
 enum UserRole {
   admin, // Trước đây là superAdmin - Quyền cao nhất
   director, // Trước đây là admin - Quản lý cấp trung
@@ -6,20 +8,9 @@ enum UserRole {
   guest,
 }
 
-enum MeetingType {
-  personal,
-  team,
-  department,
-  company,
-}
+// Đảm bảo KHÔNG có enum MeetingType ở đây!
 
-enum MeetingStatus {
-  pending,
-  approved,
-  rejected,
-  cancelled,
-  completed,
-}
+// Đã chuyển MeetingStatus sang meeting_model.dart, KHÔNG định nghĩa hoặc export MeetingStatus ở đây nữa.
 
 class UserRoleModel {
   final String id;

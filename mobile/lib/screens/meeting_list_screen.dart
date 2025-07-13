@@ -5,7 +5,7 @@ import '../providers/auth_provider.dart';
 import '../providers/meeting_provider.dart';
 import '../models/meeting_model.dart';
 import '../models/user_model.dart';
-import '../models/user_role.dart';
+import '../models/user_role.dart' hide MeetingStatus;
 import 'meeting_create_screen.dart';
 
 class MeetingListScreen extends StatefulWidget {
@@ -52,40 +52,57 @@ class _MeetingListScreenState extends State<MeetingListScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Danh sách cuộc họp'),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.grey.shade800,
+        elevation: 0,
         automaticallyImplyLeading: false,
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          tabs: const [
-            Tab(text: 'Tất cả'),
-            Tab(text: 'Chờ phê duyệt'),
-            Tab(text: 'Của tôi'),
-          ],
-        ),
-        actions: [
-          Consumer<AuthProvider>(
-            builder: (context, authProvider, child) {
-              if (authProvider.userModel == null) return const SizedBox();
-
-              // Kiểm tra quyền tạo cuộc họp
-              final canCreate =
-                  authProvider.userModel!.getAllowedMeetingTypes().isNotEmpty;
-
-              if (canCreate) {
-                return IconButton(
-                  icon: const Icon(Icons.add),
-                  onPressed: () => _navigateToCreateMeeting(),
-                );
-              }
-              return const SizedBox();
-            },
+        surfaceTintColor: Colors.white,
+        shadowColor: Colors.grey.withOpacity(0.1),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(60),
+          child: Container(
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: TabBar(
+              controller: _tabController,
+              indicator: BoxDecoration(
+                color: const Color(0xFF2E7BE9),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              indicatorPadding: const EdgeInsets.all(4),
+              tabAlignment: TabAlignment.fill,
+              indicatorSize: TabBarIndicatorSize.tab,
+              labelColor: Colors.white,
+              unselectedLabelColor: Colors.grey.shade600,
+              labelStyle: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+              unselectedLabelStyle: const TextStyle(
+                fontWeight: FontWeight.w500,
+                fontSize: 12,
+              ),
+              dividerColor: Colors.transparent,
+              tabs: const [
+                Tab(
+                  text: 'Tất cả',
+                  icon: Icon(Icons.list_outlined, size: 18),
+                ),
+                Tab(
+                  text: 'Chờ phê duyệt',
+                  icon: Icon(Icons.pending_outlined, size: 18),
+                ),
+                Tab(
+                  text: 'Của tôi',
+                  icon: Icon(Icons.person_outlined, size: 18),
+                ),
+              ],
+            ),
           ),
-        ],
+        ),
       ),
       body: Consumer<AuthProvider>(
         builder: (context, authProvider, child) {
@@ -103,6 +120,27 @@ class _MeetingListScreenState extends State<MeetingListScreen>
                   authProvider.userModel!, MeetingListType.myMeetings),
             ],
           );
+        },
+      ),
+      floatingActionButton: Consumer<AuthProvider>(
+        builder: (context, authProvider, child) {
+          if (authProvider.userModel == null) return const SizedBox();
+
+          // Kiểm tra quyền tạo cuộc họp
+          final canCreate =
+              authProvider.userModel!.getAllowedMeetingTypes().isNotEmpty;
+
+          if (canCreate) {
+            return FloatingActionButton(
+              onPressed: () => _navigateToCreateMeeting(),
+              backgroundColor: const Color(0xFF2E7BE9),
+              foregroundColor: Colors.white,
+              elevation: 4,
+              shape: const CircleBorder(),
+              child: const Icon(Icons.videocam, size: 24),
+            );
+          }
+          return const SizedBox();
         },
       ),
     );
@@ -149,164 +187,670 @@ class _MeetingListScreenState extends State<MeetingListScreen>
 
   Widget _buildEmptyState(MeetingListType type) {
     String message = '';
+    String subtitle = '';
     IconData icon = Icons.meeting_room;
 
     switch (type) {
       case MeetingListType.all:
         message = 'Chưa có cuộc họp nào';
+        subtitle = 'Danh sách cuộc họp sẽ hiển thị ở đây';
+        icon = Icons.video_call_outlined;
         break;
       case MeetingListType.pending:
         message = 'Không có cuộc họp chờ phê duyệt';
-        icon = Icons.pending;
+        subtitle = 'Các cuộc họp cần phê duyệt sẽ xuất hiện ở đây';
+        icon = Icons.pending_outlined;
         break;
       case MeetingListType.myMeetings:
         message = 'Bạn chưa tạo cuộc họp nào';
-        icon = Icons.person;
+        subtitle = 'Bắt đầu bằng cách tạo cuộc họp đầu tiên';
+        icon = Icons.person_outlined;
         break;
     }
 
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 64, color: Colors.grey),
-          const SizedBox(height: 16),
-          Text(
-            message,
-            style: const TextStyle(
-              fontSize: 18,
-              color: Colors.grey,
+      child: Container(
+        padding: const EdgeInsets.all(40),
+        margin: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
             ),
-          ),
-          const SizedBox(height: 16),
-          if (type == MeetingListType.myMeetings)
-            ElevatedButton(
-              onPressed: () => _navigateToCreateMeeting(),
-              child: const Text('Tạo cuộc họp đầu tiên'),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2E7BE9).withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                icon,
+                size: 48,
+                color: const Color(0xFF2E7BE9),
+              ),
             ),
-        ],
+            const SizedBox(height: 20),
+            Text(
+              message,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade800,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade600,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            if (type == MeetingListType.myMeetings) ...[
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () => _navigateToCreateMeeting(),
+                icon: const Icon(Icons.add, size: 20),
+                label: const Text('Tạo cuộc họp đầu tiên'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2E7BE9),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 0,
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildMeetingCard(MeetingModel meeting, UserModel currentUser) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      child: InkWell(
-        onTap: () => _showMeetingDetails(meeting),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
+    final statusColor = _getStatusColor(meeting.status);
+
+    return GestureDetector(
+      onTap: () => _showMeetingDetails(meeting),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header với status dot, title và menu
+            Row(
+              children: [
+                // Status dot
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: statusColor,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    meeting.title,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade800,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (_canManageMeeting(meeting, currentUser))
+                  PopupMenuButton<String>(
+                    icon: Icon(
+                      Icons.more_vert,
+                      color: Colors.grey.shade400,
+                      size: 24,
+                    ),
+                    padding: const EdgeInsets.all(8),
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'view',
+                        child: Text('Xem chi tiết'),
+                      ),
+                      if (meeting.isPending &&
+                          _canApproveMeeting(currentUser)) ...[
+                        const PopupMenuItem(
+                          value: 'approve',
+                          child: Text('Phê duyệt'),
+                        ),
+                        const PopupMenuItem(
+                          value: 'reject',
+                          child: Text('Từ chối'),
+                        ),
+                      ],
+                      if (meeting.creatorId == currentUser.id ||
+                          currentUser.isSuperAdmin ||
+                          currentUser.isAdmin) ...[
+                        const PopupMenuItem(
+                          value: 'edit',
+                          child: Text('Chỉnh sửa'),
+                        ),
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Text('Xóa'),
+                        ),
+                      ],
+                    ],
+                    onSelected: (value) => _handleMeetingAction(value, meeting),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            // Subtitle với thông tin thời gian
+            Text(
+              _getMeetingSubtitle(meeting),
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.grey.shade600,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Thông tin địa điểm
+            Row(
+              children: [
+                Icon(
+                  meeting.isVirtual ? Icons.videocam : Icons.location_on,
+                  size: 16,
+                  color: Colors.grey.shade500,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    meeting.isVirtual
+                        ? 'Trực tuyến'
+                        : (meeting.physicalLocation ?? 'Chưa có địa điểm'),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey.shade600,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            // Thông tin số người tham gia
+            Row(
+              children: [
+                Icon(
+                  Icons.group,
+                  size: 16,
+                  color: Colors.grey.shade500,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  '${_getParticipantCount(meeting)} người tham gia',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey.shade600,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Tags row
+            Row(
+              children: [
+                _buildSimpleChip(_getMeetingTypeText(meeting.type),
+                    Colors.blue.shade100, Colors.blue.shade800),
+                const SizedBox(width: 8),
+                _buildSimpleChip(
+                    _getPriorityText(meeting.priority),
+                    _getPriorityColor(meeting.priority).withOpacity(0.1),
+                    _getPriorityColor(meeting.priority)),
+                const Spacer(),
+                // Status chip góc phải
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: statusColor,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    _getStatusText(meeting.status),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSimpleChip(String text, Color bgColor, Color textColor) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: textColor,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  String _getMeetingSubtitle(MeetingModel meeting) {
+    final duration = meeting.endTime.difference(meeting.startTime);
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes % 60;
+    String durationText = '';
+    if (hours > 0) {
+      durationText = '${hours}h ${minutes}m';
+    } else {
+      durationText = '${minutes}m';
+    }
+
+    return '${DateFormat('HH:mm').format(meeting.startTime)} - ${DateFormat('HH:mm').format(meeting.endTime)} • $durationText';
+  }
+
+  String _getMeetingTypeText(MeetingType type) {
+    switch (type) {
+      case MeetingType.personal:
+        return 'Cá nhân';
+      case MeetingType.team:
+        return 'Team';
+      case MeetingType.department:
+        return 'Phòng ban';
+      case MeetingType.company:
+        return 'Công ty';
+    }
+  }
+
+  String _getPriorityText(MeetingPriority priority) {
+    switch (priority) {
+      case MeetingPriority.low:
+        return 'Thấp';
+      case MeetingPriority.medium:
+        return 'TB';
+      case MeetingPriority.high:
+        return 'Cao';
+      case MeetingPriority.urgent:
+        return 'Khẩn';
+    }
+  }
+
+  String _getStatusText(MeetingStatus status) {
+    switch (status) {
+      case MeetingStatus.pending:
+        return 'Chờ duyệt';
+      case MeetingStatus.approved:
+        return 'Đã duyệt';
+      case MeetingStatus.rejected:
+        return 'Từ chối';
+      case MeetingStatus.cancelled:
+        return 'Đã hủy';
+      case MeetingStatus.completed:
+        return 'Hoàn thành';
+    }
+  }
+
+  void _handleMeetingAction(String action, MeetingModel meeting) {
+    switch (action) {
+      case 'view':
+        _showMeetingDetails(meeting);
+        break;
+      case 'approve':
+        _approveMeeting(meeting);
+        break;
+      case 'reject':
+        _rejectMeeting(meeting);
+        break;
+      case 'edit':
+        _editMeeting(meeting);
+        break;
+      case 'delete':
+        _deleteMeeting(meeting);
+        break;
+    }
+  }
+
+  int _getParticipantCount(MeetingModel meeting) {
+    // Trả về số lượng người tham gia mặc định
+    // TODO: Cập nhật khi có field participants trong MeetingModel
+    return 3; // Giá trị mặc định cho demo
+  }
+
+  Widget _buildInfoRow({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String content,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: iconColor.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(
+            icon,
+            size: 16,
+            color: iconColor,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header với tiêu đề và trạng thái
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      meeting.title,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  _buildStatusChip(meeting.status),
-                ],
-              ),
-              const SizedBox(height: 8),
-
-              // Thời gian
-              Row(
-                children: [
-                  const Icon(Icons.access_time, size: 16, color: Colors.grey),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${DateFormat('dd/MM/yyyy HH:mm').format(meeting.startTime)} - ${DateFormat('HH:mm').format(meeting.endTime)}',
-                    style: const TextStyle(color: Colors.grey),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-
-              // Địa điểm
-              Row(
-                children: [
-                  Icon(
-                    meeting.isVirtual ? Icons.video_call : Icons.room,
-                    size: 16,
-                    color: Colors.grey,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      meeting.isVirtual
-                          ? 'Trực tuyến'
-                          : (meeting.physicalLocation ?? 'Chưa có địa điểm'),
-                      style: const TextStyle(color: Colors.grey),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-
-              // Loại cuộc họp và độ ưu tiên
-              Row(
-                children: [
-                  _buildTypeChip(meeting.type),
-                  const SizedBox(width: 8),
-                  _buildPriorityChip(meeting.priority),
-                ],
-              ),
-              const SizedBox(height: 8),
-
-              // Người tạo
-              Row(
-                children: [
-                  const Icon(Icons.person, size: 16, color: Colors.grey),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Tạo bởi: ${meeting.creatorName}',
-                    style: const TextStyle(color: Colors.grey),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-
-              // Actions
-              if (_canManageMeeting(meeting, currentUser))
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    if (meeting.isPending && _canApproveMeeting(currentUser))
-                      TextButton(
-                        onPressed: () => _approveMeeting(meeting),
-                        child: const Text('Phê duyệt'),
-                      ),
-                    if (meeting.isPending && _canApproveMeeting(currentUser))
-                      TextButton(
-                        onPressed: () => _rejectMeeting(meeting),
-                        child: const Text('Từ chối'),
-                      ),
-                    if (meeting.creatorId == currentUser.id ||
-                        currentUser.isSuperAdmin ||
-                        currentUser.isAdmin)
-                      TextButton(
-                        onPressed: () => _editMeeting(meeting),
-                        child: const Text('Chỉnh sửa'),
-                      ),
-                    if (meeting.creatorId == currentUser.id ||
-                        currentUser.isSuperAdmin ||
-                        currentUser.isAdmin)
-                      TextButton(
-                        onPressed: () => _deleteMeeting(meeting),
-                        child: const Text('Xóa'),
-                      ),
-                  ],
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey.shade600,
                 ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                content,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade800,
+                ),
+              ),
             ],
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _buildActionButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onPressed,
+  }) {
+    return GestureDetector(
+      onTap: onPressed,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: color.withOpacity(0.3),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: color,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Color _getStatusColor(MeetingStatus status) {
+    switch (status) {
+      case MeetingStatus.pending:
+        return Colors.orange;
+      case MeetingStatus.approved:
+        return Colors.green;
+      case MeetingStatus.rejected:
+        return Colors.red;
+      case MeetingStatus.cancelled:
+        return Colors.grey;
+      case MeetingStatus.completed:
+        return const Color(0xFF2E7BE9);
+    }
+  }
+
+  Color _getPriorityColor(MeetingPriority priority) {
+    switch (priority) {
+      case MeetingPriority.low:
+        return Colors.green;
+      case MeetingPriority.medium:
+        return Colors.orange;
+      case MeetingPriority.high:
+        return Colors.red;
+      case MeetingPriority.urgent:
+        return Colors.red.shade900;
+    }
+  }
+
+  Widget _buildModernStatusChip(MeetingStatus status) {
+    Color color = _getStatusColor(status);
+    String text;
+    IconData icon;
+
+    switch (status) {
+      case MeetingStatus.pending:
+        text = 'Chờ phê duyệt';
+        icon = Icons.schedule;
+        break;
+      case MeetingStatus.approved:
+        text = 'Đã phê duyệt';
+        icon = Icons.check_circle;
+        break;
+      case MeetingStatus.rejected:
+        text = 'Bị từ chối';
+        icon = Icons.cancel;
+        break;
+      case MeetingStatus.cancelled:
+        text = 'Đã hủy';
+        icon = Icons.block;
+        break;
+      case MeetingStatus.completed:
+        text = 'Hoàn thành';
+        icon = Icons.done_all;
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.3),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: Colors.white),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModernTypeChip(MeetingType type) {
+    String text;
+    IconData icon;
+
+    switch (type) {
+      case MeetingType.personal:
+        text = 'Cá nhân';
+        icon = Icons.person;
+        break;
+      case MeetingType.team:
+        text = 'Team';
+        icon = Icons.group;
+        break;
+      case MeetingType.department:
+        text = 'Phòng ban';
+        icon = Icons.business;
+        break;
+      case MeetingType.company:
+        text = 'Công ty';
+        icon = Icons.corporate_fare;
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2E7BE9).withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFF2E7BE9).withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 14,
+            color: const Color(0xFF2E7BE9),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: const TextStyle(
+              color: Color(0xFF2E7BE9),
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModernPriorityChip(MeetingPriority priority) {
+    Color color = _getPriorityColor(priority);
+    String text;
+    IconData icon;
+
+    switch (priority) {
+      case MeetingPriority.low:
+        text = 'Thấp';
+        icon = Icons.low_priority;
+        break;
+      case MeetingPriority.medium:
+        text = 'Trung bình';
+        icon = Icons.priority_high;
+        break;
+      case MeetingPriority.high:
+        text = 'Cao';
+        icon = Icons.priority_high;
+        break;
+      case MeetingPriority.urgent:
+        text = 'Khẩn cấp';
+        icon = Icons.warning;
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: color.withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 14,
+            color: color,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: TextStyle(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -447,39 +991,11 @@ class _MeetingListScreenState extends State<MeetingListScreen>
   }
 
   void _showMeetingDetails(MeetingModel meeting) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(meeting.title),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Mô tả: ${meeting.description}'),
-              const SizedBox(height: 8),
-              Text(
-                  'Thời gian: ${DateFormat('dd/MM/yyyy HH:mm').format(meeting.startTime)} - ${DateFormat('HH:mm').format(meeting.endTime)}'),
-              const SizedBox(height: 8),
-              Text(
-                  'Địa điểm: ${meeting.isVirtual ? 'Trực tuyến' : (meeting.physicalLocation ?? 'Chưa có')}'),
-              const SizedBox(height: 8),
-              Text('Người tham gia: ${meeting.participantCount}'),
-              if (meeting.agenda != null) ...[
-                const SizedBox(height: 8),
-                Text('Chương trình: ${meeting.agenda}'),
-              ],
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Đóng'),
-          ),
-        ],
-      ),
-    );
+    Navigator.pushNamed(
+      context,
+      '/meeting-detail',
+      arguments: meeting.id,
+    ).then((_) => _loadMeetings());
   }
 
   void _approveMeeting(MeetingModel meeting) {

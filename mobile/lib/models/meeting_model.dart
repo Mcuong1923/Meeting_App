@@ -1,18 +1,19 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'user_role.dart';
 
-enum MeetingLocationType {
-  physical,
-  virtual,
-  hybrid,
+enum MeetingStatus {
+  pending,
+  approved,
+  rejected,
+  cancelled,
+  completed,
 }
 
-enum MeetingPriority {
-  low,
-  medium,
-  high,
-  urgent,
-}
+enum MeetingType { personal, team, department, company }
+
+enum MeetingPriority { low, medium, high, urgent }
+
+enum MeetingLocationType { physical, virtual, hybrid }
 
 /// Phạm vi cuộc họp
 enum MeetingScope {

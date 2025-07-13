@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:metting_app/providers/auth_provider.dart' as app_auth;
+import 'package:metting_app/providers/theme_provider.dart';
 import 'package:metting_app/screens/home_screen.dart';
 import 'package:metting_app/components/or_divider.dart';
 import 'package:metting_app/components/social_icon.dart';
 
 class SocialSignUp extends StatelessWidget {
-  const SocialSignUp({Key? key}) : super(key: key);
+  final ThemeProvider themeProvider;
+
+  const SocialSignUp({
+    Key? key,
+    required this.themeProvider,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {

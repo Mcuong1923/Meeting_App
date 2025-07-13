@@ -16,7 +16,7 @@ class RoomManagementScreen extends StatefulWidget {
 
 class _RoomManagementScreenState extends State<RoomManagementScreen>
     with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+  TabController? _tabController;
   String _searchQuery = '';
   RoomStatus? _filterStatus;
   List<RoomAmenity> _selectedAmenities = [];
@@ -34,7 +34,7 @@ class _RoomManagementScreenState extends State<RoomManagementScreen>
 
   @override
   void dispose() {
-    _tabController.dispose();
+    _tabController?.dispose();
     super.dispose();
   }
 
@@ -49,33 +49,59 @@ class _RoomManagementScreenState extends State<RoomManagementScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Quản lý Phòng họp'),
-        backgroundColor: Colors.blue.shade600,
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.grey.shade800,
         elevation: 0,
         automaticallyImplyLeading: false,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadData,
-          ),
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () => _navigateToAddRoom(context),
-          ),
-        ],
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          tabs: const [
-            Tab(text: 'Tổng quan', icon: Icon(Icons.dashboard, size: 20)),
-            Tab(text: 'Tất cả', icon: Icon(Icons.meeting_room, size: 20)),
-            Tab(text: 'Bảo trì', icon: Icon(Icons.build, size: 20)),
-            Tab(text: 'Thống kê', icon: Icon(Icons.analytics, size: 20)),
-          ],
-        ),
+        surfaceTintColor: Colors.white,
+        shadowColor: Colors.grey.withOpacity(0.1),
+        bottom: _tabController != null
+            ? PreferredSize(
+                preferredSize: const Size.fromHeight(60),
+                child: Container(
+                  margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: TabBar(
+                    controller: _tabController!,
+                    indicator: BoxDecoration(
+                      color: const Color(0xFF2E7BE9),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    indicatorPadding: const EdgeInsets.all(4),
+                    tabAlignment: TabAlignment.fill,
+                    indicatorSize: TabBarIndicatorSize.tab,
+                    labelColor: Colors.white,
+                    unselectedLabelColor: Colors.grey.shade600,
+                    labelStyle: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                    ),
+                    unselectedLabelStyle: TextStyle(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 12,
+                    ),
+                    dividerColor: Colors.transparent,
+                    tabs: const [
+                      Tab(
+                          text: 'Tổng quan',
+                          icon: Icon(Icons.dashboard_outlined, size: 18)),
+                      Tab(
+                          text: 'Tất cả',
+                          icon: Icon(Icons.meeting_room_outlined, size: 18)),
+                      Tab(
+                          text: 'Bảo trì',
+                          icon: Icon(Icons.build_outlined, size: 18)),
+                      Tab(
+                          text: 'Thống kê',
+                          icon: Icon(Icons.analytics_outlined, size: 18)),
+                    ],
+                  ),
+                ),
+              )
+            : null,
       ),
       body: Consumer2<RoomProvider, AuthProvider>(
         builder: (context, roomProvider, authProvider, child) {
@@ -87,16 +113,26 @@ class _RoomManagementScreenState extends State<RoomManagementScreen>
             return _buildErrorWidget(roomProvider.error);
           }
 
-          return TabBarView(
-            controller: _tabController,
-            children: [
-              _buildOverviewTab(roomProvider),
-              _buildAllRoomsTab(roomProvider, authProvider.userModel),
-              _buildMaintenanceTab(roomProvider, authProvider.userModel),
-              _buildStatisticsTab(roomProvider),
-            ],
-          );
+          return _tabController != null
+              ? TabBarView(
+                  controller: _tabController!,
+                  children: [
+                    _buildOverviewTab(roomProvider),
+                    _buildAllRoomsTab(roomProvider, authProvider.userModel),
+                    _buildMaintenanceTab(roomProvider, authProvider.userModel),
+                    _buildStatisticsTab(roomProvider),
+                  ],
+                )
+              : const Center(child: CircularProgressIndicator());
         },
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _navigateToAddRoom(context),
+        backgroundColor: const Color(0xFF2E7BE9),
+        foregroundColor: Colors.white,
+        elevation: 4,
+        shape: const CircleBorder(),
+        child: const Icon(Icons.add, size: 24),
       ),
     );
   }
@@ -138,11 +174,500 @@ class _RoomManagementScreenState extends State<RoomManagementScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Statistics Cards
           _buildStatisticsCards(roomProvider),
           const SizedBox(height: 24),
+
+          // Available Rooms Section
+          _buildAvailableRoomsSection(roomProvider),
+          const SizedBox(height: 24),
+
+          // Quick Actions
           _buildQuickActions(),
           const SizedBox(height: 24),
+
+          // Recent Activity
           _buildRecentActivity(roomProvider),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAvailableRoomsSection(RoomProvider roomProvider) {
+    final availableRooms = roomProvider.rooms
+        .where((room) => room.status == RoomStatus.available && room.isActive)
+        .toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Phòng trống',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade800,
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                _tabController?.animateTo(1); // Switch to "Tất cả" tab
+              },
+              child: Text(
+                'xem tất cả',
+                style: TextStyle(
+                  color: Colors.blue.shade600,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Rooms Grid with new project-style design
+        if (availableRooms.isEmpty)
+          _buildEmptyRoomsState()
+        else
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 0.75,
+            ),
+            itemCount: availableRooms.length > 4 ? 4 : availableRooms.length,
+            itemBuilder: (context, index) {
+              final room = availableRooms[index];
+              return _buildProjectStyleRoomCard(room, index);
+            },
+          ),
+      ],
+    );
+  }
+
+  Widget _buildProjectStyleRoomCard(RoomModel room, int index) {
+    // Color schemes theo design trong hình
+    final colors = [
+      {
+        'bg': const Color(0xFF4A5FE7),
+        'light': const Color(0xFFE8EBFF)
+      }, // Dark blue (A2-302)
+      {
+        'bg': const Color(0xFF9E9E9E),
+        'light': const Color(0xFFF5F5F5)
+      }, // Gray (Phòng Họp A1)
+      {
+        'bg': const Color(0xFFFF9F43),
+        'light': const Color(0xFFFFF3E0)
+      }, // Orange (Phòng họp A1)
+      {
+        'bg': const Color(0xFF66BB6A),
+        'light': const Color(0xFFE8F5E8)
+      }, // Green (Phòng họp B1)
+    ];
+
+    final colorScheme = colors[index % colors.length];
+    final usageRate = _calculateUsageRate(room);
+    final isFirstCard = index == 0;
+
+    return GestureDetector(
+      onTap: () => _navigateToRoomDetail(context, room),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isFirstCard ? colorScheme['bg'] : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header with icon and menu
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: isFirstCard
+                        ? Colors.white.withOpacity(0.2)
+                        : colorScheme['light'],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    _getRoomIcon(room),
+                    color: isFirstCard ? Colors.white : colorScheme['bg'],
+                    size: 20,
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  icon: Icon(
+                    Icons.more_vert,
+                    color: isFirstCard ? Colors.white70 : Colors.grey.shade400,
+                    size: 18,
+                  ),
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                        value: 'view', child: Text('Xem chi tiết')),
+                    const PopupMenuItem(
+                        value: 'edit', child: Text('Chỉnh sửa')),
+                    const PopupMenuItem(
+                        value: 'maintenance', child: Text('Lên lịch bảo trì')),
+                  ],
+                  onSelected: (value) => _handleProjectCardAction(value, room),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 12),
+
+            // Room name and type
+            Text(
+              room.name,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: isFirstCard ? Colors.white : Colors.grey.shade800,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              _getRoomType(room),
+              style: TextStyle(
+                fontSize: 12,
+                color: isFirstCard ? Colors.white70 : Colors.grey.shade600,
+              ),
+            ),
+
+            const Spacer(),
+
+            // Progress section
+            Text(
+              'Tiến độ',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+                color: isFirstCard ? Colors.white70 : Colors.grey.shade600,
+              ),
+            ),
+            const SizedBox(height: 6),
+
+            // Progress bar
+            Container(
+              height: 4,
+              decoration: BoxDecoration(
+                color: isFirstCard
+                    ? Colors.white.withOpacity(0.3)
+                    : Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: FractionallySizedBox(
+                alignment: Alignment.centerLeft,
+                widthFactor: usageRate / 100,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: isFirstCard ? Colors.white : colorScheme['bg'],
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+
+            // Usage percentage
+            Text(
+              '${usageRate.toStringAsFixed(0)}%',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: isFirstCard ? Colors.white : colorScheme['bg'],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyRoomsState() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(40),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            Icons.meeting_room_outlined,
+            size: 64,
+            color: Colors.grey.shade400,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Không có phòng trống',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Thêm phòng mới để bắt đầu',
+            style: TextStyle(
+              color: Colors.grey.shade500,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 20),
+          ElevatedButton.icon(
+            onPressed: () => _navigateToAddRoom(context),
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Thêm phòng'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue.shade600,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 0,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMaintenanceDashboardCard({
+    required String title,
+    required String subtitle,
+    required String value,
+    required IconData icon,
+    required Color bgColor,
+    required bool isHighlighted,
+    required double progressValue,
+  }) {
+    // progressValue được truyền từ bên ngoài dựa trên thống kê thực tế
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Icon và menu
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isHighlighted
+                      ? Colors.white.withOpacity(0.2)
+                      : Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  icon,
+                  color: isHighlighted ? Colors.white : Colors.grey.shade700,
+                  size: 18,
+                ),
+              ),
+              const Spacer(),
+              Icon(
+                Icons.more_vert,
+                size: 14,
+                color: isHighlighted ? Colors.white70 : Colors.grey.shade400,
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+
+          // Title và số thống kê
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: isHighlighted ? Colors.white : Colors.grey.shade800,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(width: 12),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: isHighlighted ? Colors.white : Colors.grey.shade800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            style: TextStyle(
+              fontSize: 11,
+              color: isHighlighted ? Colors.white70 : Colors.grey.shade600,
+            ),
+          ),
+
+          const Spacer(),
+
+          // Progress section
+          Text(
+            'Tiến độ',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: isHighlighted ? Colors.white70 : Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 6),
+
+          // Progress bar
+          Container(
+            height: 4,
+            decoration: BoxDecoration(
+              color: isHighlighted
+                  ? Colors.white.withOpacity(0.3)
+                  : Colors.grey.shade200,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: FractionallySizedBox(
+              alignment: Alignment.centerLeft,
+              widthFactor: progressValue,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: isHighlighted ? Colors.white : Colors.orange,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+
+          // Progress percentage
+          Text(
+            '${(progressValue * 100).toStringAsFixed(0)}%',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: isHighlighted ? Colors.white : Colors.orange,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Helper methods for project-style cards
+  IconData _getRoomIcon(RoomModel room) {
+    if (room.amenities.contains(RoomAmenity.videoConference)) {
+      return Icons.video_call;
+    } else if (room.amenities.contains(RoomAmenity.projector)) {
+      return Icons.present_to_all;
+    } else if (room.capacity > 20) {
+      return Icons.groups;
+    } else {
+      return Icons.meeting_room;
+    }
+  }
+
+  String _getRoomType(RoomModel room) {
+    if (room.capacity > 50) {
+      return 'Large Conference';
+    } else if (room.capacity > 20) {
+      return 'Conference Room';
+    } else if (room.capacity > 10) {
+      return 'Meeting Room';
+    } else {
+      return 'Small Room';
+    }
+  }
+
+  double _calculateUsageRate(RoomModel room) {
+    // Calculate usage rate based on room status and bookings
+    switch (room.status) {
+      case RoomStatus.available:
+        return 30.0 + (room.capacity * 0.5); // Base usage + capacity factor
+      case RoomStatus.occupied:
+        return 85.0;
+      case RoomStatus.maintenance:
+        return 15.0;
+      case RoomStatus.disabled:
+        return 0.0;
+    }
+  }
+
+  void _handleProjectCardAction(String action, RoomModel room) {
+    switch (action) {
+      case 'view':
+        _navigateToRoomDetail(context, room);
+        break;
+      case 'edit':
+        _navigateToEditRoom(context, room);
+        break;
+      case 'maintenance':
+        _scheduleMaintenanceDialog(room);
+        break;
+    }
+  }
+
+  void _scheduleMaintenanceDialog(RoomModel room) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Lên lịch bảo trì'),
+        content: Text('Lên lịch bảo trì cho ${room.name}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Hủy'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Đã lên lịch bảo trì cho ${room.name}')),
+              );
+            },
+            child: const Text('Xác nhận'),
+          ),
         ],
       ),
     );
@@ -152,138 +677,335 @@ class _RoomManagementScreenState extends State<RoomManagementScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Thống kê tổng quan',
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+        // Welcome Card với illustration style
+        _buildWelcomeCard(),
+        const SizedBox(height: 24),
+
+        // Statistics Section Header
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Thống kê tổng quan',
+              style: TextStyle(
+                fontSize: 20,
                 fontWeight: FontWeight.bold,
-              ),
-        ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: _buildStatCard(
-                title: 'Tổng phòng',
-                value: roomProvider.totalRooms.toString(),
-                icon: Icons.meeting_room,
-                color: Colors.blue,
+                color: Colors.grey.shade800,
               ),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildStatCard(
-                title: 'Sẵn sàng',
-                value: roomProvider.availableCount.toString(),
-                icon: Icons.check_circle,
-                color: Colors.green,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _buildStatCard(
-                title: 'Đang sử dụng',
-                value: roomProvider.occupiedCount.toString(),
-                icon: Icons.people,
-                color: Colors.orange,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildStatCard(
-                title: 'Bảo trì',
-                value: roomProvider.maintenanceCount.toString(),
-                icon: Icons.build,
-                color: Colors.red,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Colors.purple.shade400, Colors.purple.shade600],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.analytics, color: Colors.white, size: 24),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Tỷ lệ sử dụng',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '${roomProvider.occupancyRate.toStringAsFixed(1)}%',
+            TextButton(
+              onPressed: () {
+                _tabController?.animateTo(3); // Statistics tab
+              },
+              child: Text(
+                'xem tất cả',
                 style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
+                  color: Colors.blue.shade600,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Statistics Grid với project-style cards
+        GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: 2,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: 1.0,
+          children: [
+            _buildProjectStyleCard(
+              title: 'Tổng phòng',
+              subtitle: 'Tất cả phòng họp',
+              value: roomProvider.totalRooms.toString(),
+              icon: Icons.home_work,
+              bgColor: const Color(0xFF2E7BE9),
+              isHighlighted: true,
+              date: '',
+              progressValue: 1.0, // 100% cho tổng phòng
+            ),
+            _buildProjectStyleCard(
+              title: 'Phòng sẵn sàng',
+              subtitle: 'Có thể sử dụng',
+              value: roomProvider.availableCount.toString(),
+              icon: Icons.check_circle,
+              bgColor: Colors.white,
+              isHighlighted: false,
+              date: '',
+              progressValue: roomProvider.totalRooms > 0
+                  ? roomProvider.availableCount / roomProvider.totalRooms
+                  : 0.0,
+            ),
+            _buildProjectStyleCard(
+              title: 'Đang sử dụng',
+              subtitle: 'Đang có người dùng',
+              value: roomProvider.occupiedCount.toString(),
+              icon: Icons.groups,
+              bgColor: Colors.white,
+              isHighlighted: false,
+              date: '',
+              progressValue: roomProvider.totalRooms > 0
+                  ? roomProvider.occupiedCount / roomProvider.totalRooms
+                  : 0.0,
+            ),
+            _buildMaintenanceDashboardCard(
+              title: 'Bảo trì',
+              subtitle: 'Cần bảo dưỡng',
+              value: roomProvider.maintenanceCount.toString(),
+              icon: Icons.build,
+              bgColor: Colors.white,
+              isHighlighted: false,
+              progressValue: roomProvider.totalRooms > 0
+                  ? roomProvider.maintenanceCount / roomProvider.totalRooms
+                  : 0.0,
+            ),
+          ],
         ),
       ],
     );
   }
 
-  Widget _buildStatCard({
-    required String title,
-    required String value,
-    required IconData icon,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+  Widget _buildWelcomeCard() {
+    return Consumer<RoomProvider>(
+      builder: (context, roomProvider, child) {
+        final occupancyRate = roomProvider.totalRooms > 0
+            ? (roomProvider.occupiedCount / roomProvider.totalRooms * 100)
+            : 0.0;
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [const Color(0xFF2E7BE9), const Color(0xFF4A90FF)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Row(
             children: [
-              Icon(icon, color: color, size: 24),
-              const Spacer(),
-              Text(
-                value,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.analytics_outlined,
+                  color: Colors.white,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Tỷ lệ sử dụng',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Progress section
+                    Text(
+                      'Tiến độ',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.white70,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+
+                    // Progress bar
+                    Container(
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: FractionallySizedBox(
+                        alignment: Alignment.centerLeft,
+                        widthFactor: occupancyRate / 100,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+
+                    Text(
+                      '${occupancyRate.toStringAsFixed(1)}%',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+        );
+      },
+    );
+  }
+
+  Widget _buildProjectStyleCard({
+    required String title,
+    required String subtitle,
+    required String value,
+    required IconData icon,
+    required Color bgColor,
+    required bool isHighlighted,
+    required String date,
+    required double progressValue,
+  }) {
+    // progressValue được truyền từ bên ngoài dựa trên thống kê thực tế
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Icon và menu
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isHighlighted
+                      ? Colors.white.withOpacity(0.2)
+                      : Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  icon,
+                  color: isHighlighted ? Colors.white : Colors.grey.shade700,
+                  size: 18,
+                ),
+              ),
+              const Spacer(),
+              Icon(
+                Icons.more_vert,
+                size: 14,
+                color: isHighlighted ? Colors.white70 : Colors.grey.shade400,
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+
+          // Title và số thống kê
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: isHighlighted ? Colors.white : Colors.grey.shade800,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(width: 12),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: isHighlighted ? Colors.white : Colors.grey.shade800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
           Text(
-            title,
+            subtitle,
             style: TextStyle(
-              color: color.withOpacity(0.8),
-              fontSize: 14,
+              fontSize: 11,
+              color: isHighlighted ? Colors.white70 : Colors.grey.shade600,
+            ),
+          ),
+
+          const Spacer(),
+
+          // Progress section
+          Text(
+            'Tiến độ',
+            style: TextStyle(
+              fontSize: 10,
               fontWeight: FontWeight.w500,
+              color: isHighlighted ? Colors.white70 : Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 6),
+
+          // Progress bar
+          Container(
+            height: 4,
+            decoration: BoxDecoration(
+              color: isHighlighted
+                  ? Colors.white.withOpacity(0.3)
+                  : Colors.grey.shade200,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: FractionallySizedBox(
+              alignment: Alignment.centerLeft,
+              widthFactor: progressValue,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: isHighlighted
+                      ? Colors.white
+                      : (bgColor == Colors.white
+                          ? const Color(0xFF2E7BE9)
+                          : bgColor),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+
+          // Progress percentage
+          Text(
+            '${(progressValue * 100).toStringAsFixed(0)}%',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: isHighlighted
+                  ? Colors.white
+                  : (bgColor == Colors.white
+                      ? const Color(0xFF2E7BE9)
+                      : bgColor),
             ),
           ),
         ],
@@ -302,28 +1024,12 @@ class _RoomManagementScreenState extends State<RoomManagementScreen>
               ),
         ),
         const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: _buildActionCard(
-                title: 'Thêm phòng',
-                subtitle: 'Tạo phòng họp mới',
-                icon: Icons.add_business,
-                color: Colors.blue,
-                onTap: () => _navigateToAddRoom(context),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildActionCard(
-                title: 'Lịch bảo trì',
-                subtitle: 'Xem lịch bảo trì',
-                icon: Icons.schedule,
-                color: Colors.green,
-                onTap: () => _tabController.animateTo(2),
-              ),
-            ),
-          ],
+        _buildActionCard(
+          title: 'Lịch bảo trì',
+          subtitle: 'Xem lịch bảo trì',
+          icon: Icons.schedule,
+          color: Colors.green,
+          onTap: () => _tabController?.animateTo(2),
         ),
       ],
     );
@@ -423,7 +1129,7 @@ class _RoomManagementScreenState extends State<RoomManagementScreen>
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: Colors.orange.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: Colors.orange.withOpacity(0.3)),
                 ),
                 child: Row(
@@ -582,6 +1288,49 @@ class _RoomManagementScreenState extends State<RoomManagementScreen>
     );
   }
 
+  Widget _buildRoomsListWidget(
+      RoomProvider roomProvider, UserModel? currentUser) {
+    List<RoomModel> filteredRooms = roomProvider.searchRooms(
+      keyword: _searchQuery,
+      status: _filterStatus,
+      requiredAmenities: _selectedAmenities,
+      minCapacity: _minCapacity,
+      maxCapacity: _maxCapacity,
+      building: _selectedBuilding,
+      floor: _selectedFloor,
+    );
+
+    if (filteredRooms.isEmpty) {
+      return Container(
+        height: 200,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.meeting_room_outlined,
+                  size: 64, color: Colors.grey.shade400),
+              const SizedBox(height: 16),
+              Text(
+                'Không tìm thấy phòng nào',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: filteredRooms
+          .take(5)
+          .map((room) => _buildRoomCard(room, currentUser))
+          .toList(),
+    );
+  }
+
   Widget _buildRoomCard(RoomModel room, UserModel? currentUser) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -717,7 +1466,7 @@ class _RoomManagementScreenState extends State<RoomManagementScreen>
                                 horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
                               color: Colors.blue.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
                               amenity,
@@ -736,7 +1485,7 @@ class _RoomManagementScreenState extends State<RoomManagementScreen>
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: Colors.orange.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
                     children: [
@@ -991,61 +1740,435 @@ class _RoomManagementScreenState extends State<RoomManagementScreen>
 
   Widget _buildStatisticsTab(RoomProvider roomProvider) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Thống kê chi tiết',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-          ),
-          const SizedBox(height: 16),
-          _buildDetailedStatistics(roomProvider),
+          _buildModernStatisticsHeader(),
+          const SizedBox(height: 24),
+          _buildModernDetailedStatistics(roomProvider),
+          const SizedBox(height: 32),
+          _buildStatisticsChart(roomProvider),
+          const SizedBox(height: 32),
+          _buildQuickStatsGrid(roomProvider),
         ],
       ),
     );
   }
 
-  Widget _buildDetailedStatistics(RoomProvider roomProvider) {
+  Widget _buildModernStatisticsHeader() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFF2E7BE9),
+            const Color(0xFF2E7BE9).withOpacity(0.8),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF2E7BE9).withOpacity(0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              Icons.analytics,
+              color: Colors.white,
+              size: 28,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Thống kê chi tiết',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Tổng quan về tình trạng phòng họp',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.white70,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModernDetailedStatistics(RoomProvider roomProvider) {
     return Column(
       children: [
-        _buildStatCard(
+        _buildModernStatCard(
           title: 'Tổng số phòng',
           value: roomProvider.totalRooms.toString(),
           icon: Icons.meeting_room,
-          color: Colors.blue,
+          color: const Color(0xFF4A90E2),
+          backgroundColor: const Color(0xFFF8FAFE),
         ),
-        const SizedBox(height: 12),
-        _buildStatCard(
-          title: 'Phòng sẵn sàng',
+        const SizedBox(height: 16),
+        _buildModernStatCard(
+          title: 'sẵn sàng',
           value: roomProvider.availableCount.toString(),
           icon: Icons.check_circle,
-          color: Colors.green,
+          color: const Color(0xFF8E8E93),
+          backgroundColor: const Color(0xFFF8F9FA),
         ),
-        const SizedBox(height: 12),
-        _buildStatCard(
+        const SizedBox(height: 16),
+        _buildModernStatCard(
           title: 'Phòng đang sử dụng',
           value: roomProvider.occupiedCount.toString(),
           icon: Icons.people,
-          color: Colors.orange,
+          color: const Color(0xFF8E8E93),
+          backgroundColor: const Color(0xFFF8F9FA),
         ),
-        const SizedBox(height: 12),
-        _buildStatCard(
+        const SizedBox(height: 16),
+        _buildModernStatCard(
           title: 'Phòng bảo trì',
           value: roomProvider.maintenanceCount.toString(),
           icon: Icons.build,
-          color: Colors.red,
+          color: const Color(0xFFFF9500),
+          backgroundColor: const Color(0xFFFFFBF5),
         ),
-        const SizedBox(height: 12),
-        _buildStatCard(
+        const SizedBox(height: 16),
+        _buildModernStatCard(
           title: 'Phòng tạm ngưng',
           value: roomProvider.disabledCount.toString(),
           icon: Icons.block,
-          color: Colors.grey,
+          color: const Color(0xFF8E8E93),
+          backgroundColor: const Color(0xFFF8F9FA),
         ),
       ],
+    );
+  }
+
+  Widget _buildStatisticsChart(RoomProvider roomProvider) {
+    final total = roomProvider.totalRooms;
+    final available = roomProvider.availableCount;
+    final occupied = roomProvider.occupiedCount;
+    final maintenance = roomProvider.maintenanceCount;
+    final disabled = roomProvider.disabledCount;
+
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.purple.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.pie_chart,
+                  color: Colors.purple,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Phân bố trạng thái',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          if (total > 0) ...[
+            _buildProgressBar(
+                'Sẵn sàng', available, total, const Color(0xFF8E8E93)),
+            const SizedBox(height: 16),
+            _buildProgressBar(
+                'Đang sử dụng', occupied, total, const Color(0xFF8E8E93)),
+            const SizedBox(height: 16),
+            _buildProgressBar(
+                'Bảo trì', maintenance, total, const Color(0xFFFF9500)),
+            const SizedBox(height: 16),
+            _buildProgressBar(
+                'Tạm ngưng', disabled, total, const Color(0xFF8E8E93)),
+          ] else
+            Center(
+              child: Text(
+                'Chưa có dữ liệu',
+                style: TextStyle(
+                  color: Colors.grey.shade500,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProgressBar(String label, int value, int total, Color color) {
+    final percentage = total > 0 ? (value / total) * 100 : 0.0;
+
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey.shade700,
+              ),
+            ),
+            Text(
+              '$value (${percentage.toStringAsFixed(1)}%)',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Container(
+          height: 8,
+          decoration: BoxDecoration(
+            color: Colors.grey.shade200,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: FractionallySizedBox(
+            alignment: Alignment.centerLeft,
+            widthFactor: percentage / 100,
+            child: Container(
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildQuickStatsGrid(RoomProvider roomProvider) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Thống kê nhanh',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Colors.grey.shade800,
+          ),
+        ),
+        const SizedBox(height: 16),
+        GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: 2,
+          crossAxisSpacing: 16,
+          mainAxisSpacing: 16,
+          childAspectRatio: 1.2,
+          children: [
+            _buildQuickStatCard(
+              'Tỷ lệ sử dụng',
+              '${_calculateUsagePercentage(roomProvider).toStringAsFixed(1)}%',
+              Icons.trending_up,
+              const Color(0xFF4A90E2),
+            ),
+            _buildQuickStatCard(
+              'Hiệu suất',
+              '${_calculateEfficiencyPercentage(roomProvider).toStringAsFixed(1)}%',
+              Icons.speed,
+              const Color(0xFF8E8E93),
+            ),
+            _buildQuickStatCard(
+              'Cần bảo trì',
+              '${roomProvider.maintenanceCount}',
+              Icons.warning,
+              const Color(0xFFFF9500),
+            ),
+            _buildQuickStatCard(
+              'Khả dụng',
+              '${roomProvider.availableCount}',
+              Icons.check_circle,
+              const Color(0xFF8E8E93),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildQuickStatCard(
+      String title, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+        border: Border.all(
+          color: color.withOpacity(0.1),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              icon,
+              color: color,
+              size: 24,
+            ),
+          ),
+          const Spacer(),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade600,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey.shade800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  double _calculateUsagePercentage(RoomProvider roomProvider) {
+    final total = roomProvider.totalRooms;
+    if (total == 0) return 0.0;
+    final used = roomProvider.occupiedCount;
+    return (used / total) * 100;
+  }
+
+  double _calculateEfficiencyPercentage(RoomProvider roomProvider) {
+    final total = roomProvider.totalRooms;
+    if (total == 0) return 0.0;
+    final available = roomProvider.availableCount + roomProvider.occupiedCount;
+    return (available / total) * 100;
+  }
+
+  Widget _buildModernStatCard({
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color color,
+    required Color backgroundColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: Colors.white, size: 24),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 

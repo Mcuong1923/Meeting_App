@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:metting_app/components/text_field_container.dart';
 import 'package:metting_app/constants.dart';
+import 'package:metting_app/providers/theme_provider.dart';
 
 class RoundedInputField extends StatelessWidget {
   final TextEditingController controller;
@@ -24,23 +26,35 @@ class RoundedInputField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return TextFieldContainer(
-      child: TextFormField(
-        controller: controller,
-        keyboardType: keyboardType,
-        textInputAction: textInputAction,
-        cursorColor: kPrimaryColor,
-        validator: validator,
-        maxLines: maxLines,
-        decoration: InputDecoration(
-          icon: Icon(
-            icon,
-            color: kPrimaryColor,
+    return Consumer<ThemeProvider>(
+      builder: (context, themeProvider, child) {
+        return TextFieldContainer(
+          child: TextFormField(
+            controller: controller,
+            keyboardType: keyboardType,
+            textInputAction: textInputAction,
+            cursorColor: themeProvider.primaryColor,
+            validator: validator,
+            maxLines: maxLines,
+            style: TextStyle(
+              color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
+            ),
+            decoration: InputDecoration(
+              icon: Icon(
+                icon,
+                color: themeProvider.primaryColor,
+              ),
+              hintText: hintText,
+              hintStyle: TextStyle(
+                color: themeProvider.isDarkMode
+                    ? Colors.white54
+                    : Colors.grey[600],
+              ),
+              border: InputBorder.none,
+            ),
           ),
-          hintText: hintText,
-          border: InputBorder.none,
-        ),
-      ),
+        );
+      },
     );
   }
 }

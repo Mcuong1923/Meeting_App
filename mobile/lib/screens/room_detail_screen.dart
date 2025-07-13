@@ -39,78 +39,73 @@ class _RoomDetailScreenState extends State<RoomDetailScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          _buildSliverAppBar(),
-          SliverFillRemaining(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildOverviewTab(),
-                _buildAmenitiesTab(),
-                _buildMaintenanceTab(),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSliverAppBar() {
-    return SliverAppBar(
-      expandedHeight: 200,
-      pinned: true,
-      backgroundColor: Colors.blue.shade600,
-      foregroundColor: Colors.white,
-      flexibleSpace: FlexibleSpaceBar(
+      backgroundColor: Colors.grey.shade50,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.grey.shade800,
+        elevation: 0,
+        surfaceTintColor: Colors.white,
+        shadowColor: Colors.grey.withOpacity(0.1),
         title: Text(
           _room.name,
-          style: const TextStyle(
+          style: TextStyle(
+            fontSize: 20,
             fontWeight: FontWeight.bold,
-            shadows: [
-              Shadow(
-                offset: Offset(0, 1),
-                blurRadius: 3,
-                color: Colors.black26,
-              ),
-            ],
+            color: Colors.grey.shade800,
           ),
         ),
-        background: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Colors.blue.shade400,
-                Colors.blue.shade600,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(60),
+          child: Container(
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: TabBar(
+              controller: _tabController,
+              indicator: BoxDecoration(
+                color: const Color(0xFF2E7BE9),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              indicatorPadding: const EdgeInsets.all(4),
+              tabAlignment: TabAlignment.fill,
+              indicatorSize: TabBarIndicatorSize.tab,
+              labelColor: Colors.white,
+              unselectedLabelColor: Colors.grey.shade600,
+              labelStyle: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+              unselectedLabelStyle: const TextStyle(
+                fontWeight: FontWeight.w500,
+                fontSize: 12,
+              ),
+              dividerColor: Colors.transparent,
+              tabs: const [
+                Tab(
+                  text: 'Tổng quan',
+                  icon: Icon(Icons.dashboard_outlined, size: 18),
+                ),
+                Tab(
+                  text: 'Tiện ích',
+                  icon: Icon(Icons.devices_outlined, size: 18),
+                ),
+                Tab(
+                  text: 'Bảo trì',
+                  icon: Icon(Icons.build_outlined, size: 18),
+                ),
               ],
             ),
           ),
-          child: _room.photoUrl.isNotEmpty
-              ? Image.network(
-                  _room.photoUrl,
-                  fit: BoxFit.cover,
-                )
-              : Container(
-                  child: Icon(
-                    Icons.meeting_room,
-                    size: 80,
-                    color: Colors.white.withOpacity(0.3),
-                  ),
-                ),
         ),
       ),
-      bottom: TabBar(
+      body: TabBarView(
         controller: _tabController,
-        indicatorColor: Colors.white,
-        labelColor: Colors.white,
-        unselectedLabelColor: Colors.white70,
-        tabs: const [
-          Tab(text: 'Tổng quan', icon: Icon(Icons.info, size: 20)),
-          Tab(text: 'Tiện ích', icon: Icon(Icons.devices, size: 20)),
-          Tab(text: 'Bảo trì', icon: Icon(Icons.build, size: 20)),
+        children: [
+          _buildOverviewTab(),
+          _buildAmenitiesTab(),
+          _buildMaintenanceTab(),
         ],
       ),
     );
@@ -122,86 +117,500 @@ class _RoomDetailScreenState extends State<RoomDetailScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildStatusCard(),
+          _buildModernHeaderCard(),
           const SizedBox(height: 16),
-          _buildInfoCard(),
+          _buildModernInfoGrid(),
           const SizedBox(height: 16),
-          _buildLocationCard(),
+          _buildModernLocationCard(),
           const SizedBox(height: 16),
-          _buildQRCodeCard(),
+          _buildModernQRCard(),
         ],
       ),
     );
   }
 
-  Widget _buildStatusCard() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 16,
-                  height: 16,
-                  decoration: BoxDecoration(
-                    color: _getRoomStatusColor(_room.status),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  'Trạng thái: ${_room.statusText}',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            if (_room.description.isNotEmpty)
-              Text(
-                _room.description,
-                style: TextStyle(
-                  color: Colors.grey.shade600,
-                  fontSize: 14,
-                ),
-              ),
-            if (_room.needsMaintenance) ...[
-              const SizedBox(height: 12),
+  Widget _buildModernHeaderCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFF2E7BE9),
+            const Color(0xFF2E7BE9).withOpacity(0.8),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF2E7BE9).withOpacity(0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
               Container(
-                width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: Row(
+                child: Icon(
+                  Icons.meeting_room,
+                  color: Colors.white,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.warning, color: Colors.orange, size: 20),
-                    const SizedBox(width: 8),
                     Text(
-                      'Phòng cần bảo trì',
-                      style: TextStyle(
-                        color: Colors.orange.shade700,
-                        fontWeight: FontWeight.w500,
+                      _room.name,
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: _getRoomStatusColor(_room.status),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          _room.statusText,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white70,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
             ],
+          ),
+          if (_room.description.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                _room.description,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                  height: 1.4,
+                ),
+              ),
+            ),
           ],
-        ),
+          if (_room.needsMaintenance) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orange.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.warning, color: Colors.orange, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Phòng cần bảo trì',
+                    style: TextStyle(
+                      color: Colors.orange.shade700,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
 
-  Widget _buildInfoCard() {
+  Widget _buildModernInfoGrid() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Thông tin chi tiết',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Colors.grey.shade800,
+          ),
+        ),
+        const SizedBox(height: 16),
+        GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: 2,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: 1.2,
+          children: [
+            _buildInfoCard(
+              icon: Icons.people,
+              title: 'Sức chứa',
+              value: '${_room.capacity}',
+              unit: 'người',
+              color: Colors.blue,
+            ),
+            _buildInfoCard(
+              icon: Icons.square_foot,
+              title: 'Diện tích',
+              value: _room.area.toStringAsFixed(1),
+              unit: 'm²',
+              color: Colors.green,
+            ),
+            _buildInfoCard(
+              icon: Icons.calendar_today,
+              title: 'Ngày tạo',
+              value: '${_room.createdAt.day}/${_room.createdAt.month}',
+              unit: '${_room.createdAt.year}',
+              color: Colors.purple,
+            ),
+            if (_room.lastMaintenanceDate != null)
+              _buildInfoCard(
+                icon: Icons.build,
+                title: 'Bảo trì cuối',
+                value:
+                    '${_room.lastMaintenanceDate!.day}/${_room.lastMaintenanceDate!.month}',
+                unit: '${_room.lastMaintenanceDate!.year}',
+                color: Colors.orange,
+              )
+            else
+              _buildInfoCard(
+                icon: Icons.new_releases,
+                title: 'Trạng thái',
+                value: 'Mới',
+                unit: '',
+                color: Colors.teal,
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInfoCard({
+    required IconData icon,
+    required String title,
+    required String value,
+    required String unit,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              icon,
+              color: color,
+              size: 24,
+            ),
+          ),
+          const Spacer(),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade600,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade800,
+                ),
+              ),
+              if (unit.isNotEmpty) ...[
+                const SizedBox(width: 4),
+                Text(
+                  unit,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade600,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModernLocationCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.location_on,
+                  color: Colors.blue,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Vị trí',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (_room.building.isNotEmpty)
+            _buildLocationRow(
+              icon: Icons.business,
+              label: 'Tòa nhà',
+              value: _room.building,
+            ),
+          if (_room.floor.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _buildLocationRow(
+              icon: Icons.layers,
+              label: 'Tầng',
+              value: _room.floor,
+            ),
+          ],
+          if (_room.location.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _buildLocationRow(
+              icon: Icons.room,
+              label: 'Vị trí',
+              value: _room.location,
+            ),
+          ],
+          if (_room.fullLocation.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Colors.blue.withOpacity(0.1),
+                  width: 1,
+                ),
+              ),
+              child: Text(
+                _room.fullLocation,
+                style: TextStyle(
+                  color: Colors.blue.shade700,
+                  fontWeight: FontWeight.w500,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLocationRow({
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    return Row(
+      children: [
+        Icon(
+          icon,
+          size: 20,
+          color: Colors.grey.shade500,
+        ),
+        const SizedBox(width: 12),
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.grey.shade600,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const Spacer(),
+        Flexible(
+          child: Text(
+            value,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade800,
+              fontSize: 14,
+            ),
+            textAlign: TextAlign.end,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildModernQRCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.purple.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.qr_code,
+                  color: Colors.purple,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'QR Code Check-in',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Container(
+            width: 120,
+            height: 120,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: Colors.grey.shade200,
+                width: 2,
+              ),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.qr_code_scanner,
+                  size: 40,
+                  color: Colors.grey.shade600,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _room.qrCode,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.grey.shade600,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Quét mã QR để check-in nhanh vào phòng này',
+            style: TextStyle(
+              color: Colors.grey.shade600,
+              fontSize: 14,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOldInfoCard() {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -423,32 +832,72 @@ class _RoomDetailScreenState extends State<RoomDetailScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Tiện ích có sẵn',
             style: TextStyle(
-              fontSize: 20,
+              fontSize: 24,
               fontWeight: FontWeight.bold,
+              color: Colors.grey.shade800,
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
+          Text(
+            'Tất cả tiện ích được trang bị trong phòng',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 24),
           if (_room.amenities.isEmpty)
             Center(
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.devices_other,
-                    size: 64,
-                    color: Colors.grey.shade400,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Chưa có tiện ích nào được cập nhật',
-                    style: TextStyle(
-                      color: Colors.grey.shade600,
-                      fontSize: 16,
+              child: Container(
+                padding: const EdgeInsets.all(40),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.withOpacity(0.1),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
                     ),
-                  ),
-                ],
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.devices_other,
+                        size: 48,
+                        color: Colors.grey.shade400,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Chưa có tiện ích nào',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Thông tin tiện ích sẽ được cập nhật sau',
+                      style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontSize: 14,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
               ),
             )
           else
@@ -456,15 +905,15 @@ class _RoomDetailScreenState extends State<RoomDetailScreen>
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 3,
+                crossAxisCount: 1,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                childAspectRatio: 4,
               ),
               itemCount: _room.amenities.length,
               itemBuilder: (context, index) {
                 final amenity = _room.amenities[index];
-                return _buildAmenityCard(amenity);
+                return _buildModernAmenityCard(amenity, index);
               },
             ),
         ],
@@ -512,6 +961,123 @@ class _RoomDetailScreenState extends State<RoomDetailScreen>
         ],
       ),
     );
+  }
+
+  Widget _buildModernAmenityCard(RoomAmenity amenity, int index) {
+    final colors = [
+      Colors.blue,
+      Colors.green,
+      Colors.orange,
+      Colors.purple,
+      Colors.red,
+      Colors.teal,
+      Colors.indigo,
+      Colors.pink,
+    ];
+    final color = colors[index % colors.length];
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+        border: Border.all(
+          color: color.withOpacity(0.1),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              _getAmenityIcon(amenity),
+              color: color,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _getAmenityName(amenity),
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _getAmenityDescription(amenity),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              'Có sẵn',
+              style: TextStyle(
+                color: color,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getAmenityDescription(RoomAmenity amenity) {
+    switch (amenity) {
+      case RoomAmenity.projector:
+        return 'Máy chiếu HD chất lượng cao';
+      case RoomAmenity.whiteboard:
+        return 'Bảng trắng viết marker';
+      case RoomAmenity.wifi:
+        return 'WiFi tốc độ cao miễn phí';
+      case RoomAmenity.airConditioner:
+        return 'Điều hòa nhiệt độ tự động';
+      case RoomAmenity.microphone:
+        return 'Hệ thống âm thanh chuyên nghiệp';
+      case RoomAmenity.speaker:
+        return 'Loa chất lượng cao';
+      case RoomAmenity.camera:
+        return 'Camera họp trực tuyến';
+      case RoomAmenity.monitor:
+        return 'Màn hình hiển thị lớn';
+      case RoomAmenity.flipChart:
+        return 'Bảng giấy di động';
+      case RoomAmenity.waterDispenser:
+        return 'Cây nước uống miễn phí';
+      case RoomAmenity.powerOutlet:
+        return 'Ổ cắm điện đầy đủ';
+      case RoomAmenity.videoConference:
+        return 'Hệ thống họp trực tuyến';
+    }
   }
 
   IconData _getAmenityIcon(RoomAmenity amenity) {
@@ -586,11 +1152,12 @@ class _RoomDetailScreenState extends State<RoomDetailScreen>
             children: [
               Row(
                 children: [
-                  const Text(
+                  Text(
                     'Lịch sử bảo trì',
                     style: TextStyle(
-                      fontSize: 20,
+                      fontSize: 24,
                       fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade800,
                     ),
                   ),
                   const Spacer(),
@@ -609,7 +1176,15 @@ class _RoomDetailScreenState extends State<RoomDetailScreen>
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
+              Text(
+                'Quản lý và theo dõi hoạt động bảo trì phòng họp',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+              const SizedBox(height: 24),
               if (maintenanceRecords.isEmpty)
                 Center(
                   child: Column(
@@ -648,109 +1223,204 @@ class _RoomDetailScreenState extends State<RoomDetailScreen>
   }
 
   Widget _buildMaintenanceCard(MaintenanceRecord record) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: _getMaintenancePriorityColor(record.priority)
-                        .withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    _getMaintenanceTypeIcon(record.type),
-                    color: _getMaintenancePriorityColor(record.priority),
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    record.title,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: _getMaintenanceStatusColor(record.status)
-                        .withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    _getMaintenanceStatusText(record.status),
-                    style: TextStyle(
-                      color: _getMaintenanceStatusColor(record.status),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              record.description,
-              style: TextStyle(color: Colors.grey.shade700),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(Icons.person, size: 16, color: Colors.grey.shade600),
-                const SizedBox(width: 4),
-                Text(
-                  record.technician,
-                  style: TextStyle(color: Colors.grey.shade600),
-                ),
-                const Spacer(),
-                Icon(Icons.schedule, size: 16, color: Colors.grey.shade600),
-                const SizedBox(width: 4),
-                Text(
-                  '${record.scheduledDate.day}/${record.scheduledDate.month}/${record.scheduledDate.year}',
-                  style: TextStyle(color: Colors.grey.shade600),
-                ),
-              ],
-            ),
-            if (record.completedDate != null) ...[
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(Icons.check_circle, size: 16, color: Colors.green),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Hoàn thành: ${record.completedDate!.day}/${record.completedDate!.month}/${record.completedDate!.year}',
-                    style: TextStyle(color: Colors.green.shade700),
-                  ),
-                ],
-              ),
-            ],
-            if (record.cost > 0) ...[
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(Icons.attach_money,
-                      size: 16, color: Colors.grey.shade600),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Chi phí: ${record.cost.toStringAsFixed(0)} VND',
-                    style: TextStyle(color: Colors.grey.shade600),
-                  ),
-                ],
-              ),
-            ],
-          ],
+    final statusColor = _getMaintenanceStatusColor(record.status);
+    final priorityColor = _getMaintenancePriorityColor(record.priority);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+        border: Border.all(
+          color: statusColor.withOpacity(0.2),
+          width: 1,
         ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header với icon, title và status
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: priorityColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  _getMaintenanceTypeIcon(record.type),
+                  color: priorityColor,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      record.title,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey.shade800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: statusColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        _getMaintenanceStatusText(record.status),
+                        style: TextStyle(
+                          color: statusColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Description
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              record.description,
+              style: TextStyle(
+                color: Colors.grey.shade700,
+                fontSize: 14,
+                height: 1.4,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Info grid
+          Row(
+            children: [
+              Expanded(
+                child: _buildMaintenanceInfoCard(
+                  icon: Icons.person,
+                  label: 'Kỹ thuật viên',
+                  value: record.technician,
+                  color: Colors.blue,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildMaintenanceInfoCard(
+                  icon: Icons.schedule,
+                  label: 'Ngày lên lịch',
+                  value:
+                      '${record.scheduledDate.day}/${record.scheduledDate.month}/${record.scheduledDate.year}',
+                  color: Colors.orange,
+                ),
+              ),
+            ],
+          ),
+
+          if (record.completedDate != null || record.cost > 0) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                if (record.completedDate != null)
+                  Expanded(
+                    child: _buildMaintenanceInfoCard(
+                      icon: Icons.check_circle,
+                      label: 'Hoàn thành',
+                      value:
+                          '${record.completedDate!.day}/${record.completedDate!.month}/${record.completedDate!.year}',
+                      color: Colors.green,
+                    ),
+                  ),
+                if (record.completedDate != null && record.cost > 0)
+                  const SizedBox(width: 12),
+                if (record.cost > 0)
+                  Expanded(
+                    child: _buildMaintenanceInfoCard(
+                      icon: Icons.attach_money,
+                      label: 'Chi phí',
+                      value: '${record.cost.toStringAsFixed(0)} VND',
+                      color: Colors.purple,
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMaintenanceInfoCard({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: color.withOpacity(0.1),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: color,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade800,
+            ),
+          ),
+        ],
       ),
     );
   }

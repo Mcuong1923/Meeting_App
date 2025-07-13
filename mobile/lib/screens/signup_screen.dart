@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import 'package:metting_app/providers/auth_provider.dart' as app_auth;
+import 'package:metting_app/providers/theme_provider.dart';
 import 'package:metting_app/constants.dart';
 import 'package:metting_app/screens/home_screen.dart';
 import 'package:metting_app/screens/login_screen.dart' show LoginScreen;
@@ -17,28 +18,39 @@ class SignUpScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: SingleChildScrollView(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const SizedBox(height: 40),
-            const SignUpScreenTopImage(),
-            const SizedBox(height: 20),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: SignUpForm(),
+    return Consumer<ThemeProvider>(
+      builder: (context, themeProvider, child) {
+        return Scaffold(
+          backgroundColor:
+              themeProvider.isDarkMode ? const Color(0xFF000000) : Colors.white,
+          body: SingleChildScrollView(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const SizedBox(height: 40),
+                SignUpScreenTopImage(themeProvider: themeProvider),
+                const SizedBox(height: 20),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  child: SignUpForm(themeProvider: themeProvider),
+                ),
+                SocialSignUp(themeProvider: themeProvider),
+              ],
             ),
-            const SocialSignUp(),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }
 
 class SignUpScreenTopImage extends StatelessWidget {
-  const SignUpScreenTopImage({Key? key}) : super(key: key);
+  final ThemeProvider themeProvider;
+
+  const SignUpScreenTopImage({
+    Key? key,
+    required this.themeProvider,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -46,7 +58,11 @@ class SignUpScreenTopImage extends StatelessWidget {
       children: [
         Text(
           "MEETING APP".toUpperCase(),
-          style: const TextStyle(fontWeight: FontWeight.bold),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 24,
+            color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
+          ),
         ),
         const SizedBox(height: defaultPadding),
         Row(
@@ -54,7 +70,12 @@ class SignUpScreenTopImage extends StatelessWidget {
             const Spacer(),
             Expanded(
               flex: 8,
-              child: SvgPicture.asset("assets/icons/signup.svg"),
+              child: SvgPicture.asset(
+                "assets/icons/signup.svg",
+                colorFilter: themeProvider.isDarkMode
+                    ? const ColorFilter.mode(Colors.white, BlendMode.srcIn)
+                    : null,
+              ),
             ),
             const Spacer(),
           ],
@@ -66,7 +87,12 @@ class SignUpScreenTopImage extends StatelessWidget {
 }
 
 class SignUpForm extends StatefulWidget {
-  const SignUpForm({Key? key}) : super(key: key);
+  final ThemeProvider themeProvider;
+
+  const SignUpForm({
+    Key? key,
+    required this.themeProvider,
+  }) : super(key: key);
 
   @override
   State<SignUpForm> createState() => _SignUpFormState();
@@ -166,7 +192,7 @@ class _SignUpFormState extends State<SignUpForm> {
                         }
                       },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: kPrimaryColor,
+                  backgroundColor: widget.themeProvider.primaryColor,
                   minimumSize: const Size.fromHeight(50),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(30),
@@ -181,12 +207,17 @@ class _SignUpFormState extends State<SignUpForm> {
                       )
                     : const Text(
                         "ĐĂNG KÝ",
-                        style: TextStyle(color: Colors.white),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
               ),
               const SizedBox(height: defaultPadding),
               AlreadyHaveAnAccountCheck(
                 login: false,
+                themeProvider: widget.themeProvider,
                 press: () {
                   Navigator.push(
                     context,

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'user_role.dart';
+import 'meeting_model.dart';
 
 class UserModel {
   final String id;
@@ -203,16 +204,14 @@ class UserModel {
   }
 
   // Helper methods
-  bool get isAdmin =>
-      role == UserRole.admin; // Quyền cao nhất (admin)
-  bool get isDirector =>
-      role == UserRole.director; // Quản lý cấp trung 
+  bool get isAdmin => role == UserRole.admin; // Quyền cao nhất (admin)
+  bool get isDirector => role == UserRole.director; // Quản lý cấp trung
   bool get isManager => role == UserRole.manager;
   bool get isEmployee => role == UserRole.employee;
   bool get isGuest => role == UserRole.guest;
 
   // Backward compatibility
-  bool get isSuperAdmin => isAdmin; 
+  bool get isSuperAdmin => isAdmin;
 
   bool canCreateMeeting(MeetingType meetingType) {
     final roleModel = UserRoleModel.getRoleByEnum(role);

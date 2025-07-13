@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/meeting_model.dart';
 import '../models/user_model.dart';
-import '../models/user_role.dart';
+import '../models/user_role.dart' hide MeetingStatus;
 import 'package:provider/provider.dart';
 import '../providers/notification_provider.dart';
 

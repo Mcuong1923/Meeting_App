@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import 'package:metting_app/providers/auth_provider.dart' as app_auth;
+import 'package:metting_app/providers/theme_provider.dart';
 import 'package:metting_app/components/background.dart';
 import 'package:metting_app/constants.dart';
 import 'package:metting_app/screens/signup_screen.dart';
@@ -48,42 +49,58 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const SizedBox(height: 40),
-              const LoginScreenTopImage(),
-              const SizedBox(height: 20),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                child: LoginForm(
-                  initialEmail: widget.initialEmail,
-                  initialPassword: widget.initialPassword,
-                ),
+    return Consumer<ThemeProvider>(
+      builder: (context, themeProvider, child) {
+        return Scaffold(
+          backgroundColor:
+              themeProvider.isDarkMode ? const Color(0xFF000000) : Colors.white,
+          body: SafeArea(
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const SizedBox(height: 40),
+                  LoginScreenTopImage(themeProvider: themeProvider),
+                  const SizedBox(height: 20),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                    child: LoginForm(
+                      initialEmail: widget.initialEmail,
+                      initialPassword: widget.initialPassword,
+                      themeProvider: themeProvider,
+                    ),
+                  ),
+                  SocialSignUp(themeProvider: themeProvider),
+                  const SizedBox(height: 24),
+                ],
               ),
-              const SocialSignUp(),
-              const SizedBox(height: 24),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
 
 class LoginScreenTopImage extends StatelessWidget {
-  const LoginScreenTopImage({Key? key}) : super(key: key);
+  final ThemeProvider themeProvider;
+
+  const LoginScreenTopImage({
+    Key? key,
+    required this.themeProvider,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        const Text(
+        Text(
           "MEETING APP",
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 24,
+            color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
+          ),
         ),
         const SizedBox(height: defaultPadding * 2),
         Row(
@@ -91,7 +108,12 @@ class LoginScreenTopImage extends StatelessWidget {
             const Spacer(),
             Expanded(
               flex: 8,
-              child: SvgPicture.asset("assets/icons/login.svg"),
+              child: SvgPicture.asset(
+                "assets/icons/login.svg",
+                colorFilter: themeProvider.isDarkMode
+                    ? const ColorFilter.mode(Colors.white, BlendMode.srcIn)
+                    : null,
+              ),
             ),
             const Spacer(),
           ],
@@ -105,11 +127,13 @@ class LoginScreenTopImage extends StatelessWidget {
 class LoginForm extends StatefulWidget {
   final String? initialEmail;
   final String? initialPassword;
+  final ThemeProvider themeProvider;
 
   const LoginForm({
     Key? key,
     this.initialEmail,
     this.initialPassword,
+    required this.themeProvider,
   }) : super(key: key);
 
   @override
@@ -206,7 +230,7 @@ class _LoginFormState extends State<LoginForm> {
                         }
                       },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: kPrimaryColor,
+                  backgroundColor: widget.themeProvider.primaryColor,
                   minimumSize: const Size.fromHeight(50),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(30),
@@ -223,11 +247,16 @@ class _LoginFormState extends State<LoginForm> {
                       )
                     : const Text(
                         "Đăng nhập",
-                        style: TextStyle(color: Colors.white),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
               ),
               const SizedBox(height: defaultPadding),
               AlreadyHaveAnAccountCheck(
+                themeProvider: widget.themeProvider,
                 press: () {
                   Navigator.push(
                     context,

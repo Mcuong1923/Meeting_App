@@ -6,6 +6,8 @@ import 'package:metting_app/models/notification_model.dart';
 import 'package:metting_app/models/user_model.dart';
 import 'package:metting_app/models/meeting_model.dart';
 import 'package:intl/intl.dart';
+import 'dart:convert';
+import '../main.dart'; // Import for navigatorKey
 
 class NotificationProvider extends ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -84,7 +86,7 @@ class NotificationProvider extends ChangeNotifier {
     await _localNotifications
         .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>()
-        ?.requestPermission();
+        ?.requestNotificationsPermission();
   }
 
   /// Khởi tạo Firebase Cloud Messaging
@@ -148,19 +150,51 @@ class NotificationProvider extends ChangeNotifier {
       iOS: iosDetails,
     );
 
+    // Create robust payload
+    final payloadMap = {
+      'type': message.data['type'] ?? 'general',
+      'meetingId': message.data['meetingId'],
+      'roomId': message.data['roomId'],
+    };
+    final payloadString = jsonEncode(payloadMap);
+
     await _localNotifications.show(
       message.hashCode,
       message.notification?.title ?? 'Thông báo',
       message.notification?.body ?? '',
       details,
-      payload: message.data['payload'],
+      payload: payloadString,
     );
   }
 
   /// Xử lý khi tap vào notification
   void _onNotificationTapped(NotificationResponse response) {
     print('📱 Notification tapped: ${response.payload}');
-    // Handle navigation based on payload
+    
+    if (response.payload != null) {
+      try {
+        final data = jsonDecode(response.payload!);
+        final type = data['type'];
+        final meetingId = data['meetingId'];
+        
+        print('🔔 Tap Action - Type: $type, MeetingId: $meetingId');
+        
+        if (meetingId != null && 
+            (type == 'meetingInvitation' || 
+             type == 'meetingApproved' || 
+             type == 'meetingApproval' ||
+             type == 'meetingApprovalResult')) {
+          
+          print('🚀 Navigating to meeting detail: $meetingId');
+          navigatorKey.currentState?.pushNamed(
+            '/meeting-detail',
+            arguments: meetingId,
+          );
+        }
+      } catch (e) {
+        print('❌ Error parsing notification payload: $e');
+      }
+    }
   }
 
   /// Load notifications cho user hiện tại (auto-detect user)

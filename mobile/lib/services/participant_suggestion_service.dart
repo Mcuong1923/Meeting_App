@@ -73,7 +73,8 @@ class ParticipantSuggestionService {
         userEmail: user.email,
         role: defaultRole,
         isRequired: isRequired,
-        hasConfirmed: false,
+        hasConfirmed: true, // Auto-confirm: mời là join luôn
+        confirmedAt: DateTime.now(),
       );
     }).toList();
   }

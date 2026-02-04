@@ -94,40 +94,74 @@ class _RoleApprovalScreenState extends State<RoleApprovalScreen>
         'Chưa xác định';
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF6F7FB),
       appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF1A1A1A), size: 20),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
         title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            const Text('Quản lý vai trò'),
+            const Text(
+              'Phê duyệt vai trò',
+              style: TextStyle(
+                color: Color(0xFF1A1A1A),
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
+            ),
             if (isDirector) ...[
               Text(
-                'Phòng ban: $userDepartment',
-                style: const TextStyle(
-                    fontSize: 12, fontWeight: FontWeight.normal),
+                userDepartment,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.normal,
+                  color: Colors.grey.shade600,
+                ),
               ),
             ],
           ],
         ),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.search_rounded, color: Color(0xFF1A1A1A)),
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Tính năng tìm kiếm đang phát triển')),
+              );
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded, color: Color(0xFF1A1A1A)),
             onPressed: _loadData,
           ),
         ],
         bottom: isDirector
-            ? TabBar(
-                controller: _tabController,
-                tabs: const [
-                  Tab(text: 'Chờ duyệt', icon: Icon(Icons.pending_actions)),
-                  Tab(text: 'Quản lý PB', icon: Icon(Icons.people)),
-                ],
+            ? PreferredSize(
+                preferredSize: const Size.fromHeight(48),
+                child: Container(
+                  color: Colors.white,
+                  child: TabBar(
+                    controller: _tabController,
+                    labelColor: const Color(0xFF1A1A1A),
+                    unselectedLabelColor: Colors.grey.shade500,
+                    indicatorColor: const Color(0xFF9B7FED),
+                    indicatorWeight: 3,
+                    tabs: const [
+                      Tab(text: 'Chờ duyệt'),
+                      Tab(text: 'Quản lý PB'),
+                    ],
+                  ),
+                ),
               )
             : null,
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFF9B7FED)))
           : isDirector
               ? TabBarView(
                   controller: _tabController,
@@ -142,28 +176,25 @@ class _RoleApprovalScreenState extends State<RoleApprovalScreen>
 
   Widget _buildPendingUsersList() {
     if (_pendingUsers.isEmpty) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.check_circle_outline,
-              size: 64,
-              color: Colors.green,
-            ),
-            SizedBox(height: 16),
+            Icon(Icons.check_circle_outline_rounded, size: 64, color: Colors.grey.shade300),
+            const SizedBox(height: 16),
             Text(
               'Không có yêu cầu nào chờ phê duyệt',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
+              style: TextStyle(fontSize: 16, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
             ),
           ],
         ),
       );
     }
 
-    return ListView.builder(
+    return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: _pendingUsers.length,
+      separatorBuilder: (context, index) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final user = _pendingUsers[index];
         return _buildPendingUserCard(user);
@@ -173,28 +204,25 @@ class _RoleApprovalScreenState extends State<RoleApprovalScreen>
 
   Widget _buildDepartmentUsersList() {
     if (_departmentUsers.isEmpty) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.people_outline,
-              size: 64,
-              color: Colors.grey,
-            ),
-            SizedBox(height: 16),
+            Icon(Icons.people_outline_rounded, size: 64, color: Colors.grey.shade300),
+            const SizedBox(height: 16),
             Text(
               'Chưa có nhân viên nào trong phòng ban',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
+              style: TextStyle(fontSize: 16, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
             ),
           ],
         ),
       );
     }
 
-    return ListView.builder(
+    return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: _departmentUsers.length,
+      separatorBuilder: (context, index) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final user = _departmentUsers[index];
         return _buildDepartmentUserCard(user);
@@ -203,25 +231,39 @@ class _RoleApprovalScreenState extends State<RoleApprovalScreen>
   }
 
   Widget _buildDepartmentUserCard(UserModel user) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      elevation: 4,
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Thông tin user
             Row(
               children: [
                 CircleAvatar(
-                  backgroundImage: user.photoURL != null
+                  radius: 20,
+                  backgroundImage: user.photoURL != null && user.photoURL!.isNotEmpty
                       ? NetworkImage(user.photoURL!)
                       : null,
-                  child: user.photoURL == null
-                      ? Text(user.displayName.isNotEmpty
-                          ? user.displayName[0].toUpperCase()
-                          : 'U')
+                  backgroundColor: const Color(0xFFF0F1F5),
+                  child: user.photoURL == null || user.photoURL!.isEmpty
+                      ? Text(
+                          user.displayName.isNotEmpty ? user.displayName[0].toUpperCase() : 'U',
+                          style: const TextStyle(
+                            color: Color(0xFF9B7FED),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        )
                       : null,
                 ),
                 const SizedBox(width: 12),
@@ -233,109 +275,84 @@ class _RoleApprovalScreenState extends State<RoleApprovalScreen>
                         user.displayName,
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
-                          fontSize: 16,
+                          fontSize: 15,
+                          color: Color(0xFF1A1A1A),
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
+                      const SizedBox(height: 2),
                       Text(
                         user.email,
                         style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 14,
+                          color: Colors.grey.shade500,
+                          fontSize: 13,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
                 ),
-                // Role badge
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: _getRoleColor(user.role),
-                    borderRadius: BorderRadius.circular(12),
+                    color: _getRoleColor(user.role).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     _getRoleName(user.role),
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: _getRoleColor(user.role),
                       fontSize: 12,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
               ],
             ),
-
-            const SizedBox(height: 16),
-
-            // Thông tin chi tiết
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey[50],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey[200]!),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            
+            if (user.departmentName != null) ...[
+              const SizedBox(height: 10),
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      Icon(_getRoleIcon(user.role),
-                          size: 16, color: Colors.grey[600]),
-                      const SizedBox(width: 8),
-                      Text('Vai trò: ${_getRoleName(user.role)}'),
-                    ],
+                  Icon(Icons.business_outlined, size: 14, color: Colors.grey.shade400),
+                  const SizedBox(width: 6),
+                  Text(
+                    user.departmentName!,
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                   ),
-                  if (user.departmentName != null) ...[
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Icon(Icons.business, size: 16, color: Colors.grey[600]),
-                        const SizedBox(width: 8),
-                        Text('Phòng ban: ${user.departmentName}'),
-                      ],
-                    ),
-                  ],
-                  if (user.isActive) ...[
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Icon(Icons.check_circle, size: 16, color: Colors.green),
-                        const SizedBox(width: 8),
-                        const Text('Đang hoạt động'),
-                      ],
-                    ),
-                  ],
                 ],
               ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Nút hành động (chỉ cho Director)
+            ],
+            
+            const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
-                  child: ElevatedButton.icon(
+                  child: OutlinedButton.icon(
                     onPressed: () => _changeUserRole(user),
-                    icon: const Icon(Icons.edit),
-                    label: const Text('Sửa vai trò'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
+                    icon: const Icon(Icons.edit_outlined, size: 16),
+                    label: const Text('Sửa vai trò', style: TextStyle(fontSize: 13)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF9B7FED),
+                      side: const BorderSide(color: Color(0xFF9B7FED), width: 1),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
                 Expanded(
-                  child: ElevatedButton.icon(
+                  child: OutlinedButton.icon(
                     onPressed: () => _deleteUser(user),
-                    icon: const Icon(Icons.delete),
-                    label: const Text('Xóa'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      foregroundColor: Colors.white,
+                    icon: Icon(Icons.delete_outline_rounded, size: 16, color: Colors.red.shade400),
+                    label: Text('Xóa', style: TextStyle(fontSize: 13, color: Colors.red.shade400)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red.shade400,
+                      side: BorderSide(color: Colors.red.shade400, width: 1),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                   ),
                 ),
@@ -348,25 +365,41 @@ class _RoleApprovalScreenState extends State<RoleApprovalScreen>
   }
 
   Widget _buildPendingUserCard(UserModel user) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      elevation: 4,
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Thông tin user
+            // Header Row
             Row(
               children: [
                 CircleAvatar(
-                  backgroundImage: user.photoURL != null
+                  radius: 20,
+                  backgroundImage: user.photoURL != null && user.photoURL!.isNotEmpty
                       ? NetworkImage(user.photoURL!)
                       : null,
-                  child: user.photoURL == null
-                      ? Text(user.displayName.isNotEmpty
-                          ? user.displayName[0].toUpperCase()
-                          : 'U')
+                  backgroundColor: const Color(0xFFF0F1F5),
+                  child: user.photoURL == null || user.photoURL!.isEmpty
+                      ? Text(
+                          user.displayName.isNotEmpty ? user.displayName[0].toUpperCase() : 'U',
+                          style: const TextStyle(
+                            color: Color(0xFF9B7FED),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        )
                       : null,
                 ),
                 const SizedBox(width: 12),
@@ -378,105 +411,106 @@ class _RoleApprovalScreenState extends State<RoleApprovalScreen>
                         user.displayName,
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
-                          fontSize: 16,
+                          fontSize: 15,
+                          color: Color(0xFF1A1A1A),
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
+                      const SizedBox(height: 2),
                       Text(
                         user.email,
                         style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 14,
+                          color: Colors.grey.shade500,
+                          fontSize: 13,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'Chờ duyệt',
+                    style: TextStyle(
+                      color: Colors.orange.shade700,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],
             ),
 
-            const SizedBox(height: 16),
-
-            // Thông tin yêu cầu
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.blue[50],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.blue[200]!),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Yêu cầu phê duyệt:',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
+            const SizedBox(height: 12),
+            
+            // Request Summary (compact, no heavy box)
+            Row(
+              children: [
+                Icon(_getRoleIcon(user.pendingRole!), size: 14, color: Colors.grey.shade500),
+                const SizedBox(width: 6),
+                Text(
+                  _getRoleName(user.pendingRole!),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey.shade700,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (user.pendingDepartment != null) ...[
+                  Text(' • ', style: TextStyle(color: Colors.grey.shade400)),
+                  Icon(Icons.business_outlined, size: 14, color: Colors.grey.shade500),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      user.pendingDepartment!,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade700,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Icon(
-                        _getRoleIcon(user.pendingRole!),
-                        size: 20,
-                        color: _getRoleColor(user.pendingRole!),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Vai trò: ${_getRoleName(user.pendingRole!)}',
-                        style: const TextStyle(fontWeight: FontWeight.w500),
-                      ),
-                    ],
-                  ),
-                  if (user.pendingDepartment != null) ...[
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.business,
-                          size: 20,
-                          color: Colors.grey,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Phòng ban: ${user.pendingDepartment}',
-                          style: const TextStyle(fontWeight: FontWeight.w500),
-                        ),
-                      ],
-                    ),
-                  ],
                 ],
-              ),
+              ],
             ),
 
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
 
-            // Nút hành động
+            // Compact Action Buttons
             Row(
               children: [
                 Expanded(
-                  child: ElevatedButton.icon(
+                  child: OutlinedButton.icon(
                     onPressed: () => _approveUser(user),
-                    icon: const Icon(Icons.check),
-                    label: const Text('Phê duyệt'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    icon: Icon(Icons.check_circle_outline_rounded, size: 16, color: Colors.green.shade600),
+                    label: Text('Phê duyệt', style: TextStyle(fontSize: 13, color: Colors.green.shade600)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.green.shade600,
+                      side: BorderSide(color: Colors.green.shade600, width: 1),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
                 Expanded(
-                  child: ElevatedButton.icon(
+                  child: OutlinedButton.icon(
                     onPressed: () => _rejectUser(user),
-                    icon: const Icon(Icons.close),
-                    label: const Text('Từ chối'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    icon: Icon(Icons.cancel_outlined, size: 16, color: Colors.red.shade400),
+                    label: Text('Từ chối', style: TextStyle(fontSize: 13, color: Colors.red.shade400)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red.shade400,
+                      side: BorderSide(color: Colors.red.shade400, width: 1),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                   ),
                 ),
@@ -508,34 +542,34 @@ class _RoleApprovalScreenState extends State<RoleApprovalScreen>
   Color _getRoleColor(UserRole role) {
     switch (role) {
       case UserRole.admin:
-        return Colors.orange;
+        return Colors.red.shade700;
       case UserRole.director:
-        return Colors.purple;
+        return Colors.orange.shade800;
       case UserRole.manager:
-        return Colors.blue;
+        return Colors.blue.shade700;
       case UserRole.employee:
-        return Colors.green;
+        return Colors.green.shade700;
       case UserRole.guest:
-        return Colors.grey;
+        return Colors.grey.shade600;
       default:
-        return Colors.grey;
+        return Colors.grey.shade600;
     }
   }
 
   IconData _getRoleIcon(UserRole role) {
     switch (role) {
       case UserRole.admin:
-        return Icons.manage_accounts;
+        return Icons.admin_panel_settings_outlined;
       case UserRole.director:
-        return Icons.business_center;
+        return Icons.business_center_outlined;
       case UserRole.manager:
-        return Icons.people;
+        return Icons.people_outline_rounded;
       case UserRole.employee:
-        return Icons.person;
+        return Icons.person_outline_rounded;
       case UserRole.guest:
-        return Icons.person_outline;
+        return Icons.person_off_outlined;
       default:
-        return Icons.help;
+        return Icons.help_outline_rounded;
     }
   }
 
@@ -552,7 +586,7 @@ class _RoleApprovalScreenState extends State<RoleApprovalScreen>
             backgroundColor: Colors.green,
           ),
         );
-        _loadData(); // Reload danh sách
+        _loadData();
       }
     } catch (e) {
       if (mounted) {
@@ -567,20 +601,49 @@ class _RoleApprovalScreenState extends State<RoleApprovalScreen>
   }
 
   Future<void> _rejectUser(UserModel user) async {
-    // Hiển thị dialog xác nhận
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Xác nhận từ chối'),
-        content: Text(
-            'Bạn có chắc chắn muốn từ chối yêu cầu vai trò ${_getRoleName(user.pendingRole!)} của ${user.displayName}?'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Xác nhận từ chối', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Bạn có chắc chắn muốn từ chối yêu cầu vai trò ${_getRoleName(user.pendingRole!)} của ${user.displayName}?'),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline_rounded, color: Colors.orange.shade700, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Người dùng sẽ giữ vai trò Guest',
+                      style: TextStyle(color: Colors.orange.shade700, fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
             child: const Text('Hủy'),
           ),
-          TextButton(
+          ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade400,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
             child: const Text('Từ chối'),
           ),
         ],
@@ -600,7 +663,7 @@ class _RoleApprovalScreenState extends State<RoleApprovalScreen>
               backgroundColor: Colors.orange,
             ),
           );
-          _loadData(); // Reload danh sách
+          _loadData();
         }
       } catch (e) {
         if (mounted) {
@@ -616,10 +679,10 @@ class _RoleApprovalScreenState extends State<RoleApprovalScreen>
   }
 
   Future<void> _changeUserRole(UserModel user) async {
-    // Hiển thị dialog chọn role mới
     final newRole = await showDialog<UserRole>(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text('Thay đổi vai trò cho ${user.displayName}'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -627,7 +690,7 @@ class _RoleApprovalScreenState extends State<RoleApprovalScreen>
               .where((role) =>
                   role != UserRole.admin) // Director không thể tạo Admin
               .map((role) => ListTile(
-                    leading: Icon(_getRoleIcon(role)),
+                    leading: Icon(_getRoleIcon(role), color: _getRoleColor(role)),
                     title: Text(_getRoleName(role)),
                     onTap: () => Navigator.of(context).pop(role),
                   ))
@@ -655,7 +718,7 @@ class _RoleApprovalScreenState extends State<RoleApprovalScreen>
               backgroundColor: Colors.green,
             ),
           );
-          _loadData(); // Reload danh sách
+          _loadData();
         }
       } catch (e) {
         if (mounted) {
@@ -671,37 +734,37 @@ class _RoleApprovalScreenState extends State<RoleApprovalScreen>
   }
 
   Future<void> _deleteUser(UserModel user) async {
-    // Hiển thị dialog xác nhận xóa
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Xác nhận xóa nhân viên'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Xác nhận xóa nhân viên', style: TextStyle(fontWeight: FontWeight.bold)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Bạn có chắc chắn muốn xóa nhân viên ${user.displayName}?'),
             const SizedBox(height: 8),
-            Text('Email: ${user.email}'),
-            Text('Vai trò: ${_getRoleName(user.role)}'),
+            Text('Email: ${user.email}', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+            Text('Vai trò: ${_getRoleName(user.role)}', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.red[50],
+                color: Colors.red.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red[200]!),
               ),
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(Icons.warning, color: Colors.red),
-                  SizedBox(width: 8),
+                  Icon(Icons.warning_rounded, color: Colors.red.shade600, size: 20),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'Hành động này không thể hoàn tác!',
                       style: TextStyle(
-                        color: Colors.red,
+                        color: Colors.red.shade600,
                         fontWeight: FontWeight.bold,
+                        fontSize: 13,
                       ),
                     ),
                   ),
@@ -717,7 +780,10 @@ class _RoleApprovalScreenState extends State<RoleApprovalScreen>
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
             child: const Text('Xóa', style: TextStyle(color: Colors.white)),
           ),
         ],
@@ -727,7 +793,7 @@ class _RoleApprovalScreenState extends State<RoleApprovalScreen>
     if (confirm == true) {
       try {
         final authProvider = Provider.of<AuthProvider>(context, listen: false);
-        await authProvider.deleteUserInDepartment(user.id);
+        await authProvider.deleteUser(user.id);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -736,7 +802,7 @@ class _RoleApprovalScreenState extends State<RoleApprovalScreen>
               backgroundColor: Colors.orange,
             ),
           );
-          _loadData(); // Reload danh sách
+          _loadData();
         }
       } catch (e) {
         if (mounted) {

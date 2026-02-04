@@ -97,6 +97,7 @@ class _ParticipantSelectionWidgetState
       }
     }
 
+    if (!mounted) return;
     widget.onSelectionChanged(newSelection);
   }
 
@@ -111,6 +112,7 @@ class _ParticipantSelectionWidgetState
       newSelection.add(user);
     }
 
+    if (!mounted) return;
     widget.onSelectionChanged(newSelection);
   }
 

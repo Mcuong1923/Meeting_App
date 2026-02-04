@@ -575,8 +575,8 @@ class AuthProvider with ChangeNotifier {
     return users;
   }
 
-  // Director xóa user trong department mình
-  Future<void> deleteUserInDepartment(String userId) async {
+  // Delete user (Admin can delete any, Director deleted only in their department)
+  Future<void> deleteUser(String userId) async {
     if (_userModel == null ||
         (!_userModel!.isAdmin && !_userModel!.isDirector)) {
       throw Exception('Bạn không có quyền xóa user');
@@ -692,16 +692,28 @@ class AuthProvider with ChangeNotifier {
 
   /// Gửi yêu cầu vai trò và phòng ban (cho role selection screen)
   Future<void> submitRoleAndDepartment(
-      UserRole role, String? departmentId) async {
+      UserRole role, String? departmentId, {String? fullName}) async {
     try {
       if (_user == null) throw Exception('Chưa đăng nhập');
+      
+      // Validate department is required (safety guard against UI bypass)
+      if (departmentId == null || departmentId.isEmpty) {
+        throw Exception('Vui lòng chọn phòng ban');
+      }
 
-      await _firestore.collection('users').doc(_user!.uid).update({
+      final updateData = {
         'pendingRole': role.toString().split('.').last,
         'pendingDepartment': departmentId,
         'isRoleApproved': false,
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      };
+      
+      // Add displayName if provided
+      if (fullName != null && fullName.isNotEmpty) {
+        updateData['displayName'] = fullName;
+      }
+
+      await _firestore.collection('users').doc(_user!.uid).update(updateData);
 
       // Reload user model
       await _loadUserModel();
@@ -711,6 +723,103 @@ class AuthProvider with ChangeNotifier {
     } catch (e) {
       throw Exception('Lỗi gửi yêu cầu vai trò: $e');
     }
+  }
+
+  /// Update basic profile info (avatar, full name) - applies immediately for all users
+  Future<void> updateBasicInfo(String fullName, {String? photoURL}) async {
+    try {
+      if (_user == null) throw Exception('Chưa đăng nhập');
+
+      final updateData = {
+        'displayName': fullName,
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      if (photoURL != null) {
+        updateData['photoURL'] = photoURL;
+      }
+
+      await _firestore.collection('users').doc(_user!.uid).update(updateData);
+
+      // Reload user model
+      await _loadUserModel();
+      notifyListeners();
+
+      print('✅ Đã cập nhật thông tin cơ bản');
+    } catch (e) {
+      throw Exception('Lỗi cập nhật thông tin: $e');
+    }
+  }
+
+  /// Create role/department change request (for regular users) - requires approval
+  Future<void> createRoleChangeRequest(UserRole newRole, String? newDepartment) async {
+    try {
+      if (_user == null) throw Exception('Chưa đăng nhập');
+      if (_userModel == null) throw Exception('Không tìm thấy thông tin user');
+
+      // Check if user is admin (shouldn't use this method)
+      if (_userModel!.isAdmin) {
+        throw Exception('Admin nên dùng updateRoleAndDepartment thay vì tạo request');
+      }
+
+      await _firestore.collection('users').doc(_user!.uid).update({
+        'pendingRole': newRole.toString().split('.').last,
+        'pendingDepartment': newDepartment,
+        'requestedAt': FieldValue.serverTimestamp(),
+        'isRoleApproved': false,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      // Reload user model
+      await _loadUserModel();
+      notifyListeners();
+
+      print('✅ Đã tạo yêu cầu thay đổi vai trò/phòng ban');
+    } catch (e) {
+      throw Exception('Lỗi tạo yêu cầu: $e');
+    }
+  }
+
+  /// Update role/department immediately (for Global Admin only) - no approval needed
+  Future<void> updateRoleAndDepartmentImmediate(UserRole newRole, String? newDepartment) async {
+    try {
+      if (_user == null) throw Exception('Chưa đăng nhập');
+      if (_userModel == null) throw Exception('Không tìm thấy thông tin user');
+
+      // Only admin can use this method
+      if (!_userModel!.isAdmin) {
+        throw Exception('Chỉ Admin mới có thể cập nhật vai trò trực tiếp');
+      }
+
+      await _firestore.collection('users').doc(_user!.uid).update({
+        'role': newRole.toString().split('.').last,
+        'departmentId': newDepartment,
+        'isRoleApproved': true,
+        // Clear any pending requests
+        'pendingRole': null,
+        'pendingDepartment': null,
+        'requestedAt': null,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      // Reload user model
+      await _loadUserModel();
+      notifyListeners();
+
+      print('✅ Đã cập nhật vai trò/phòng ban (Admin)');
+    } catch (e) {
+      throw Exception('Lỗi cập nhật vai trò: $e');
+    }
+  }
+
+  /// Check if user has pending role/department change request
+  bool hasPendingRoleChange() {
+    return _userModel?.pendingRole != null || _userModel?.pendingDepartment != null;
+  }
+
+  /// Check if current user is Global Admin
+  bool isGlobalAdmin() {
+    return _userModel?.isAdmin == true;
   }
 
   /// Hướng dẫn tạo Super Admin thủ công (không tự động tạo)

@@ -246,6 +246,7 @@ class MeetingBasicForm extends StatelessWidget {
                                   // ✅ Fix: Cập nhật meeting type trước khi mở dialog phòng ban
                                   onTypeChanged(MeetingType.department);
                                   Navigator.of(context).pop();
+                                  if (!context.mounted) return;
                                   _showDepartmentSelectionDialog(context);
                                 } else {
                                   onTypeChanged(type);
@@ -316,7 +317,10 @@ class MeetingBasicForm extends StatelessWidget {
                   children: [
                     Expanded(
                       child: TextButton(
-                        onPressed: () => Navigator.of(context).pop(),
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          if (!context.mounted) return;
+                        },
                         child: const Text('Hủy'),
                       ),
                     ),
@@ -409,17 +413,13 @@ class MeetingBasicForm extends StatelessWidget {
                             child: Material(
                               color: Colors.transparent,
                               child: InkWell(
-                                onTap: () {
-                                  // ✅ Fix: Store context before navigation and show dialog immediately
-                                  final dialogContext = context;
-                                  onDepartmentChanged(department.id);
+                                onTap: () async {
                                   Navigator.of(context).pop();
-
-                                  // ✅ Show dialog immediately without delay to avoid context issues
                                   WidgetsBinding.instance
                                       .addPostFrameCallback((_) {
+                                    if (!context.mounted) return;
                                     _showParticipantRoleDialog(
-                                        dialogContext, department);
+                                        context, department);
                                   });
                                 },
                                 borderRadius: BorderRadius.circular(16),
@@ -738,7 +738,8 @@ class MeetingBasicForm extends StatelessWidget {
                 role:
                     'participant', // Default role - will be updated with actual roles
                 isRequired: true,
-                hasConfirmed: false,
+                hasConfirmed: true, // Auto-confirm: mời là join luôn
+                confirmedAt: DateTime.now(),
               );
             }).toList();
 

@@ -7,6 +7,7 @@ import 'package:metting_app/screens/room_management_screen.dart';
 import 'package:metting_app/screens/room_setup_screen.dart';
 import 'package:metting_app/screens/welcome/welcome_screen.dart';
 import 'package:metting_app/screens/role_approval_screen.dart';
+import 'package:metting_app/screens/edit_profile_screen.dart';
 import 'package:metting_app/models/user_role.dart';
 import 'package:metting_app/models/user_model.dart';
 
@@ -33,29 +34,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor:
             themeProvider.isDarkMode ? const Color(0xFF1C1C1E) : Colors.white,
         elevation: 0,
-        leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back,
-            color: themeProvider.isDarkMode ? Colors.white : Colors.black,
-          ),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          'Cài đặt',
-          style: TextStyle(
-            color: themeProvider.isDarkMode ? Colors.white : Colors.black,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        centerTitle: true,
+        automaticallyImplyLeading: false,
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Tài khoản
-          _buildUserInfoCard(authProvider),
-          const SizedBox(height: 16),
+          // ACCOUNT Section
+          _buildSectionHeader('Account'),
+          const SizedBox(height: 8),
+          _buildCompactAccountRow(authProvider),
+          
+          // SETTINGS Section
+          _buildSectionHeader('Settings'),
+          const SizedBox(height: 8),
 
           // Ngôn ngữ
           _buildSettingItem(
@@ -79,17 +70,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 12),
 
-          // Chế độ tối
-          _buildToggleItem(
-            icon: Icons.brightness_6_outlined,
-            iconColor: const Color(0xFF8E8E93),
-            title: 'Chế độ tối',
-            subtitle: themeProvider.isDarkMode ? 'Đang bật' : 'Đang tắt',
-            value: themeProvider.isDarkMode,
-            onChanged: (value) => themeProvider.setDarkMode(value),
-          ),
-          const SizedBox(height: 12),
-
           // Thông báo
           _buildToggleItem(
             icon: Icons.notifications_outlined,
@@ -108,11 +88,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
               iconColor: Colors.purple,
               title: 'Quản lý phòng họp',
               subtitle: 'Quản lý phòng, tiện ích và bảo trì',
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (context) => const RoomManagementScreen()),
-              ),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => WillPopScope(
+                      onWillPop: () async {
+                        Navigator.of(context)
+                            .pushNamedAndRemoveUntil('/home', (route) => false);
+                        return false;
+                      },
+                      child: const RoomManagementScreen(),
+                    ),
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 12),
             _buildSettingItem(
@@ -120,11 +110,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
               iconColor: Colors.indigo,
               title: 'Setup phòng họp',
               subtitle: 'Cấu hình và tạo phòng mặc định',
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (context) => const RoomSetupScreen()),
-              ),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => WillPopScope(
+                      onWillPop: () async {
+                        Navigator.of(context)
+                            .pushNamedAndRemoveUntil('/home', (route) => false);
+                        return false;
+                      },
+                      child: const RoomSetupScreen(),
+                    ),
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 12),
           ],
@@ -136,11 +136,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
               iconColor: Colors.blue,
               title: 'Quản lý vai trò',
               subtitle: 'Phê duyệt và quản lý nhân viên trong phòng ban',
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (context) => const RoleApprovalScreen()),
-              ),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => WillPopScope(
+                      onWillPop: () async {
+                        Navigator.of(context)
+                            .pushNamedAndRemoveUntil('/home', (route) => false);
+                        return false;
+                      },
+                      child: const RoleApprovalScreen(),
+                    ),
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 12),
           ],
@@ -336,257 +346,170 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildUserInfoCard(app_auth.AuthProvider authProvider) {
+  Widget _buildCompactAccountRow(app_auth.AuthProvider authProvider) {
     final userModel = authProvider.userModel;
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
 
-    return Consumer<ThemeProvider>(
-      builder: (context, themeProvider, child) {
-        // Xác định vai trò hiển thị
-        String displayRole;
-        String displayDepartment;
-        Color roleColor;
-        IconData roleIcon;
+    // Determine display values
+    String displayRole;
+    String displayDepartment;
 
-        if (userModel?.isRoleApproved == true) {
-          displayRole = _getRoleDisplayName(userModel!.role);
-          displayDepartment = _getDepartmentDisplayName(userModel);
-          roleColor = _getRoleColor(userModel.role);
-          roleIcon = _getRoleIcon(userModel.role);
-        } else {
-          displayRole = 'Guest';
-          displayDepartment = 'Chưa xác định';
-          roleColor = Colors.grey;
-          roleIcon = Icons.person_outline;
-        }
+    if (userModel?.isRoleApproved == true) {
+      displayRole = _getRoleDisplayName(userModel!.role);
+      displayDepartment = _getDepartmentDisplayName(userModel);
+    } else {
+      displayRole = 'Guest';
+      displayDepartment = 'Chưa xác định';
+    }
 
-        return Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: themeProvider.isDarkMode
-                ? const Color(0xFF1C1C1E)
-                : Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 2),
+    final subtitle = '$displayRole • $displayDepartment';
+
+    return Container(
+      decoration: BoxDecoration(
+        color: themeProvider.isDarkMode
+            ? const Color(0xFF1C1C1E)
+            : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: colorScheme.outlineVariant,
+          width: 1,
+        ),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        leading: Stack(
+          children: [
+            CircleAvatar(
+              radius: 28,
+              backgroundImage: NetworkImage(
+                'https://i.pravatar.cc/150?u=${authProvider.userEmail ?? 'default'}',
               ),
-            ],
+              backgroundColor: colorScheme.primaryContainer,
+            ),
+            // Approval badge overlay (bottom-right)
+            if (_shouldShowApprovalBadge(userModel))
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: _buildApprovalBadge(userModel),
+              ),
+          ],
+        ),
+        title: Text(
+          userModel?.displayName ?? 'Người dùng',
+          style: textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: colorScheme.onSurface,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header với avatar và tên
-              Row(
-                children: [
-                  Container(
-                    width: 60,
-                    height: 60,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          roleColor.withOpacity(0.1),
-                          roleColor.withOpacity(0.2)
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    child: Icon(
-                      roleIcon,
-                      color: roleColor,
-                      size: 28,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          userModel?.displayName ?? 'Người dùng',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            color: themeProvider.isDarkMode
-                                ? Colors.white
-                                : Colors.black87,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          authProvider.userEmail ?? '',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: themeProvider.isDarkMode
-                                ? Colors.white70
-                                : const Color(0xFF8E8E93),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-
-              // Thông tin vai trò và phòng ban
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: themeProvider.isDarkMode
-                      ? const Color(0xFF2C2C2E)
-                      : const Color(0xFFF8F9FA),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                      color: themeProvider.isDarkMode
-                          ? const Color(0xFF38383A)
-                          : const Color(0xFFF0F0F0)),
-                ),
-                child: Column(
-                  children: [
-                    _buildInfoRow(
-                      icon: Icons.work_outline,
-                      label: 'Vai trò',
-                      value: displayRole,
-                      valueColor: roleColor,
-                      themeProvider: themeProvider,
-                    ),
-                    const SizedBox(height: 12),
-                    _buildInfoRow(
-                      icon: Icons.business_outlined,
-                      label: 'Phòng ban',
-                      value: displayDepartment,
-                      valueColor: themeProvider.isDarkMode
-                          ? Colors.white
-                          : Colors.black87,
-                      themeProvider: themeProvider,
-                    ),
-                    // Hiển thị thông tin pending nếu có
-                    if (userModel?.pendingRole != null ||
-                        userModel?.pendingDepartment != null) ...[
-                      const SizedBox(height: 12),
-                      const Divider(color: Color(0xFFE0E0E0)),
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Column(
-                          children: [
-                            Row(
-                              children: [
-                                Icon(Icons.pending_outlined,
-                                    color: Colors.orange, size: 16),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Đang chờ duyệt:',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.orange[700],
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            if (userModel?.pendingRole != null)
-                              _buildInfoRow(
-                                icon: Icons.work_outline,
-                                label: 'Vai trò mới',
-                                value: _getRoleDisplayName(
-                                    userModel!.pendingRole!),
-                                valueColor: Colors.orange[700]!,
-                                themeProvider: themeProvider,
-                                fontSize: 12,
-                              ),
-                            if (userModel?.pendingDepartment != null)
-                              _buildInfoRow(
-                                icon: Icons.business_outlined,
-                                label: 'Phòng ban mới',
-                                value: _mapDepartmentIdToDisplayName(
-                                    userModel!.pendingDepartment!),
-                                valueColor: Colors.orange[700]!,
-                                themeProvider: themeProvider,
-                                fontSize: 12,
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // Nút chỉnh sửa
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Chức năng đang phát triển')),
-                  ),
-                  icon: const Icon(Icons.edit_outlined, size: 18),
-                  label: const Text('Chỉnh sửa thông tin'),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    side: BorderSide(color: themeProvider.primaryColor),
-                    foregroundColor: themeProvider.primaryColor,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+        ),
+        subtitle: Text(
+          subtitle,
+          style: textTheme.bodySmall?.copyWith(
+            color: colorScheme.onSurfaceVariant,
           ),
-        );
-      },
+        ),
+        trailing: Icon(
+          Icons.chevron_right,
+          color: colorScheme.onSurfaceVariant,
+        ),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const EditProfileScreen(),
+            ),
+          );
+        },
+      ),
     );
   }
 
-  Widget _buildInfoRow({
-    required IconData icon,
-    required String label,
-    required String value,
-    required Color valueColor,
-    required ThemeProvider themeProvider,
-    double fontSize = 14,
-  }) {
-    return Row(
-      children: [
-        Icon(icon,
-            size: 16,
-            color: themeProvider.isDarkMode
-                ? Colors.white70
-                : const Color(0xFF8E8E93)),
-        const SizedBox(width: 8),
-        Text(
-          '$label:',
-          style: TextStyle(
-            fontSize: fontSize,
-            color: themeProvider.isDarkMode
-                ? Colors.white70
-                : const Color(0xFF8E8E93),
-          ),
+  bool _shouldShowApprovalBadge(UserModel? userModel) {
+    if (userModel == null) return false;
+    // Show badge for approved users or global admins
+    return userModel.isRoleApproved == true || userModel.role == UserRole.admin;
+  }
+
+  Widget _buildApprovalBadge(UserModel? userModel) {
+    if (userModel == null) return const SizedBox.shrink();
+
+    Color badgeColor;
+    IconData iconData = Icons.check_circle;
+
+    // Gold tick for Global Admin
+    if (userModel.role == UserRole.admin) {
+      badgeColor = Colors.amber;
+    }
+    // Green tick for approved users
+    else if (userModel.isRoleApproved == true) {
+      badgeColor = Colors.green;
+    }
+    // No badge for pending/unapproved
+    else {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      width: 18,
+      height: 18,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+      ),
+      padding: const EdgeInsets.all(2),
+      child: Icon(
+        iconData,
+        size: 14,
+        color: badgeColor,
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    final textTheme = Theme.of(context).textTheme;
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 16, top: 24, bottom: 8),
+      child: Text(
+        title.toUpperCase(),
+        style: textTheme.labelLarge?.copyWith(
+          color: colorScheme.onSurfaceVariant,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.5,
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            value,
-            style: TextStyle(
-              fontSize: fontSize,
-              fontWeight: FontWeight.w500,
-              color: valueColor,
-            ),
-          ),
+      ),
+    );
+  }
+
+
+  Widget _buildInitialsAvatar(String name, ColorScheme colorScheme) {
+    final initials = name.isNotEmpty ? name.trim()[0].toUpperCase() : 'U';
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          colors: [
+            colorScheme.primary,
+            colorScheme.tertiary,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-      ],
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        initials,
+        style: TextStyle(
+          fontSize: 24,
+          fontWeight: FontWeight.bold,
+          color: colorScheme.onPrimary,
+        ),
+      ),
     );
   }
 

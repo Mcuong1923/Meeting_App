@@ -716,7 +716,7 @@ class _RoomManagementScreenState extends State<RoomManagementScreen>
           crossAxisCount: 2,
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
-          childAspectRatio: 1.0,
+          childAspectRatio: 0.9,
           children: [
             _buildProjectStyleCard(
               title: 'Tổng phòng',

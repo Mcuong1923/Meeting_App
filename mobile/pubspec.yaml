@@ -15,8 +15,8 @@ dependencies:
   provider: ^6.1.1
   http: ^1.1.0
   shared_preferences: ^2.2.2
-  intl: ^0.19.0
-  flutter_local_notifications: ^15.1.0
+  intl: ^0.20.2
+  flutter_local_notifications: ^17.0.0
   image_picker: ^1.0.2
   cached_network_image: ^3.3.1
   flutter_svg: ^2.0.9
@@ -44,6 +44,7 @@ dependencies:
   # Analytics
   device_info_plus: ^10.1.2
   package_info_plus: ^8.0.2
+  flutter_slidable: ^3.0.0
 
 dev_dependencies:
   flutter_test:

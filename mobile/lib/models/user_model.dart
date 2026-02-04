@@ -20,6 +20,7 @@ class UserModel {
   final Map<String, dynamic>? additionalData;
   final UserRole? pendingRole;
   final String? pendingDepartment;
+  final DateTime? requestedAt;
   final bool isRoleApproved;
 
   UserModel({
@@ -40,6 +41,7 @@ class UserModel {
     this.additionalData,
     this.pendingRole,
     this.pendingDepartment,
+    this.requestedAt,
     this.isRoleApproved = true,
   });
 
@@ -68,6 +70,7 @@ class UserModel {
               )
             : null,
         pendingDepartment: map['pendingDepartment']?.toString(),
+        requestedAt: _parseTimestamp(map['requestedAt']),
         isRoleApproved: map['isRoleApproved'] == true,
       );
     } catch (e) {
@@ -157,6 +160,7 @@ class UserModel {
       'additionalData': additionalData,
       'pendingRole': pendingRole?.toString().split('.').last,
       'pendingDepartment': pendingDepartment,
+      'requestedAt': requestedAt != null ? Timestamp.fromDate(requestedAt!) : null,
       'isRoleApproved': isRoleApproved,
     };
   }
@@ -179,6 +183,7 @@ class UserModel {
     Map<String, dynamic>? additionalData,
     UserRole? pendingRole,
     String? pendingDepartment,
+    DateTime? requestedAt,
     bool? isRoleApproved,
   }) {
     return UserModel(
@@ -199,6 +204,7 @@ class UserModel {
       additionalData: additionalData ?? this.additionalData,
       pendingRole: pendingRole ?? this.pendingRole,
       pendingDepartment: pendingDepartment ?? this.pendingDepartment,
+      requestedAt: requestedAt ?? this.requestedAt,
       isRoleApproved: isRoleApproved ?? this.isRoleApproved,
     );
   }

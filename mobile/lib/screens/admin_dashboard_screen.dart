@@ -4,10 +4,13 @@ import 'package:metting_app/providers/auth_provider.dart' as app_auth;
 import 'package:metting_app/constants.dart';
 import 'package:iconly/iconly.dart';
 import 'role_management_screen.dart';
-import 'setup_super_admin_screen.dart';
+
 import 'room_management_screen.dart';
 import 'room_setup_screen.dart';
 import 'role_approval_screen.dart';
+
+import 'meeting_approval_list_screen.dart';
+import 'all_tasks_screen.dart';
 
 class AdminDashboardScreen extends StatelessWidget {
   const AdminDashboardScreen({Key? key}) : super(key: key);
@@ -18,97 +21,56 @@ class AdminDashboardScreen extends StatelessWidget {
     final userModel = authProvider.userModel;
     final isAdmin = userModel?.isAdmin == true;
     final isDirector = userModel?.isDirector == true;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: const Color(0xFFF6F7FB),
       appBar: AppBar(
-        title: const Text(
-          'Quản lý hệ thống',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 22,
-          ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Quản lý hệ thống',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+                color: Color(0xFF1A1A1A),
+              ),
+            ),
+            Text(
+              'Cấu hình và quản trị',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade600,
+                fontWeight: FontWeight.normal,
+              ),
+            ),
+          ],
         ),
-        backgroundColor: Colors.transparent,
+        backgroundColor: const Color(0xFFF6F7FB),
         elevation: 0,
-        foregroundColor: kPrimaryColor,
+        centerTitle: false,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, 
+            size: 20, 
+            color: Color(0xFF1A1A1A)
+          ),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header card
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [kPrimaryColor, kAccentColor],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: kPrimaryColor.withOpacity(0.3),
-                    blurRadius: 10,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                    child: const Icon(
-                      Icons.admin_panel_settings,
-                      color: Colors.white,
-                      size: 30,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          isAdmin ? 'Quản trị viên' : 'Giám đốc',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Quản lý và điều hành hệ thống',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.9),
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Quản lý người dùng và vai trò
-            _buildSectionTitle('Quản lý người dùng'),
-            const SizedBox(height: 12),
             if (isAdmin || isDirector) ...[
+              _buildSectionTitle('Quản lý người dùng'),
+              const SizedBox(height: 12),
               _buildFeatureCard(
                 context,
                 title: 'Quản lý vai trò',
                 subtitle: 'Phân quyền và quản lý vai trò người dùng',
-                icon: Icons.admin_panel_settings,
-                color: Colors.red,
+                icon: Icons.badge_outlined,
                 onTap: () {
                   Navigator.push(
                     context,
@@ -120,13 +82,13 @@ class AdminDashboardScreen extends StatelessWidget {
               ),
               const SizedBox(height: 12),
             ],
+            
             if (isAdmin) ...[
               _buildFeatureCard(
                 context,
                 title: 'Phê duyệt vai trò',
                 subtitle: 'Duyệt yêu cầu thay đổi vai trò',
-                icon: Icons.approval,
-                color: Colors.green,
+                icon: Icons.verified_outlined,
                 onTap: () {
                   Navigator.push(
                     context,
@@ -136,33 +98,34 @@ class AdminDashboardScreen extends StatelessWidget {
                   );
                 },
               ),
+              const SizedBox(height: 24),
+
+              _buildSectionTitle('Quản lý cuộc họp'),
               const SizedBox(height: 12),
               _buildFeatureCard(
                 context,
-                title: 'Thiết lập Admin',
-                subtitle: 'Cấu hình và quản lý tài khoản Admin',
-                icon: Icons.settings,
-                color: Colors.orange,
+                title: 'Phê duyệt cuộc họp',
+                subtitle: 'Duyệt yêu cầu tạo cuộc họp',
+                icon: Icons.approval_outlined, // Or check_circle_outline
                 onTap: () {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => const SetupSuperAdminScreen(),
+                      builder: (context) => const MeetingApprovalListScreen(),
                     ),
                   );
                 },
               ),
-              const SizedBox(height: 24),
 
-              // Quản lý phòng họp
+              const SizedBox(height: 24),
               _buildSectionTitle('Quản lý phòng họp'),
               const SizedBox(height: 12),
+              
               _buildFeatureCard(
                 context,
                 title: 'Quản lý phòng họp',
                 subtitle: 'Quản lý phòng, tiện ích và bảo trì',
-                icon: Icons.meeting_room,
-                color: Colors.purple,
+                icon: Icons.meeting_room_outlined,
                 onTap: () {
                   Navigator.push(
                     context,
@@ -177,8 +140,7 @@ class AdminDashboardScreen extends StatelessWidget {
                 context,
                 title: 'Setup phòng họp',
                 subtitle: 'Cấu hình và tạo phòng mặc định',
-                icon: Icons.auto_fix_high,
-                color: Colors.indigo,
+                icon: Icons.settings_suggest_outlined,
                 onTap: () {
                   Navigator.push(
                     context,
@@ -188,39 +150,53 @@ class AdminDashboardScreen extends StatelessWidget {
                   );
                 },
               ),
+
+              const SizedBox(height: 24),
+              _buildSectionTitle('Quản lý công việc'),
+              const SizedBox(height: 12),
+              _buildFeatureCard(
+                context,
+                title: 'Quản lý công việc',
+                subtitle: 'Theo dõi và quản lý công việc',
+                icon: Icons.task_outlined,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const AllTasksScreen(),
+                    ),
+                  );
+                },
+              ),
+              
+              const SizedBox(height: 24),
+              _buildSectionTitle('Thống kê và báo cáo'),
+              const SizedBox(height: 12),
+              
+              _buildFeatureCard(
+                context,
+                title: 'Thống kê sử dụng',
+                subtitle: 'Xem báo cáo và thống kê hệ thống',
+                icon: Icons.analytics_outlined, // Changed to outlined
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Chức năng đang phát triển')),
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+              _buildFeatureCard(
+                context,
+                title: 'Nhật ký hoạt động',
+                subtitle: 'Theo dõi hoạt động của người dùng',
+                icon: Icons.history_outlined, // Changed to outlined/simulated
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Chức năng đang phát triển')),
+                  );
+                },
+              ),
             ],
-
-            const SizedBox(height: 24),
-
-            // Thống kê và báo cáo
-            _buildSectionTitle('Thống kê và báo cáo'),
-            const SizedBox(height: 12),
-            _buildFeatureCard(
-              context,
-              title: 'Thống kê sử dụng',
-              subtitle: 'Xem báo cáo và thống kê hệ thống',
-              icon: Icons.analytics,
-              color: Colors.blue,
-              onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Chức năng đang phát triển')),
-                );
-              },
-            ),
-            const SizedBox(height: 12),
-            _buildFeatureCard(
-              context,
-              title: 'Nhật ký hoạt động',
-              subtitle: 'Theo dõi hoạt động của người dùng',
-              icon: Icons.history,
-              color: Colors.teal,
-              onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Chức năng đang phát triển')),
-                );
-              },
-            ),
-
             const SizedBox(height: 40),
           ],
         ),
@@ -229,12 +205,15 @@ class AdminDashboardScreen extends StatelessWidget {
   }
 
   Widget _buildSectionTitle(String title) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontSize: 18,
-        fontWeight: FontWeight.bold,
-        color: Colors.black87,
+    return Padding(
+      padding: const EdgeInsets.only(left: 4),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          color: Color(0xFF1A1A1A),
+        ),
       ),
     );
   }
@@ -244,63 +223,77 @@ class AdminDashboardScreen extends StatelessWidget {
     required String title,
     required String subtitle,
     required IconData icon,
-    required Color color,
     required VoidCallback onTap,
   }) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+    // Determine color based on app theme or fixed color
+    // Keeping it simple and consistent as requested
+    final iconColor = const Color(0xFF57636C); 
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+        border: Border.all(
+          color: Colors.black.withOpacity(0.03),
+          width: 1,
+        ),
       ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            child: Row(
+              children: [
+                Icon(
                   icon,
-                  color: color,
-                  size: 24,
+                  color: iconColor,
+                  size: 22,
                 ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF1A1A1A),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey.shade500,
+                          height: 1.3,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              Icon(
-                Icons.arrow_forward_ios,
-                color: Colors.grey[400],
-                size: 16,
-              ),
-            ],
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  color: Colors.grey.shade300,
+                  size: 16,
+                ),
+              ],
+            ),
           ),
         ),
       ),

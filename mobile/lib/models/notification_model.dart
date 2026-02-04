@@ -212,7 +212,7 @@ class NotificationModel {
       case NotificationType.meetingUpdated:
         return 'Cập nhật cuộc họp';
       case NotificationType.meetingInvitation:
-        return 'Mời tham gia';
+        return 'Thêm vào cuộc họp';
       case NotificationType.roomMaintenance:
         return 'Bảo trì phòng';
       case NotificationType.roleChange:
@@ -320,4 +320,90 @@ class NotificationTemplate {
       createdAt: DateTime.now(),
     );
   }
+
+  static NotificationModel meetingApprovalRequest({
+    required String userId,
+    required String meetingTitle,
+    required String meetingId,
+    required String creatorName,
+  }) {
+    return NotificationModel(
+      id: '',
+      userId: userId,
+      title: 'Yêu cầu phê duyệt cuộc họp',
+      message: '$creatorName đã tạo cuộc họp "$meetingTitle" và cần bạn phê duyệt.',
+      type: NotificationType.meetingApproval,
+      priority: NotificationPriority.high,
+      isRead: false,
+      createdAt: DateTime.now(),
+      meetingId: meetingId,
+      meetingTitle: meetingTitle,
+    );
+  }
+
+  static NotificationModel meetingApproved({
+    required String userId,
+    required String meetingTitle,
+    required String meetingId,
+    required String approverName,
+  }) {
+    return NotificationModel(
+      id: '',
+      userId: userId,
+      title: 'Cuộc họp đã được phê duyệt',
+      message: 'Cuộc họp "$meetingTitle" của bạn đã được $approverName phê duyệt.',
+      type: NotificationType.meetingApprovalResult,
+      priority: NotificationPriority.high,
+      isRead: false,
+      createdAt: DateTime.now(),
+      meetingId: meetingId,
+      meetingTitle: meetingTitle,
+    );
+  }
+
+  static NotificationModel meetingRejected({
+    required String userId,
+    required String meetingTitle,
+    required String meetingId,
+    required String rejectorName,
+    required String reason,
+  }) {
+    return NotificationModel(
+      id: '',
+      userId: userId,
+      title: 'Cuộc họp bị từ chối',
+      message: 'Cuộc họp "$meetingTitle" đã bị $rejectorName từ chối. Lý do: $reason',
+      type: NotificationType.meetingApprovalResult,
+      priority: NotificationPriority.high,
+      isRead: false,
+      createdAt: DateTime.now(),
+      meetingId: meetingId,
+      meetingTitle: meetingTitle,
+    );
+  }
+
+  static NotificationModel meetingInvitation({
+    required String userId,
+    required String meetingTitle,
+    required String meetingId,
+    required DateTime meetingTime,
+    required String creatorName,
+  }) {
+    // Format meeting time
+    final formattedTime = '${meetingTime.day.toString().padLeft(2, '0')}/${meetingTime.month.toString().padLeft(2, '0')}/${meetingTime.year} lúc ${meetingTime.hour.toString().padLeft(2, '0')}:${meetingTime.minute.toString().padLeft(2, '0')}';
+    
+    return NotificationModel(
+      id: '',
+      userId: userId,
+      title: 'Bạn đã được thêm vào cuộc họp',
+      message: 'Bạn đã được thêm vào cuộc họp "$meetingTitle" vào $formattedTime. Người tạo: $creatorName.',
+      type: NotificationType.meetingInvitation,
+      priority: NotificationPriority.normal,
+      isRead: false,
+      createdAt: DateTime.now(),
+      meetingId: meetingId,
+      meetingTitle: meetingTitle,
+    );
+  }
 }
+

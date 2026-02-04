@@ -15,6 +15,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
   UserRole? _selectedRole;
   String? _selectedDepartment;
   bool _isSubmitting = false;
+  final TextEditingController _fullNameController = TextEditingController();
 
   final List<String> _departments = [
     'Công nghệ thông tin',
@@ -25,6 +26,12 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
     'Vận hành',
     'Khác',
   ];
+
+  @override
+  void dispose() {
+    _fullNameController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -57,6 +64,29 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
             ),
             const SizedBox(height: 30),
 
+            // Họ và tên
+            Text(
+              'Họ và tên:',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _fullNameController,
+              decoration: InputDecoration(
+                hintText: 'Nhập họ và tên của bạn',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
+                prefixIcon: const Icon(Icons.person_outline),
+              ),
+              textCapitalization: TextCapitalization.words,
+            ),
+            const SizedBox(height: 30),
+
             // Chọn vai trò
             Text(
               'Vai trò của bạn:',
@@ -85,7 +115,11 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _selectedRole != null && !_isSubmitting
+                onPressed: _selectedRole != null &&
+                        _fullNameController.text.trim().isNotEmpty &&
+                        _selectedDepartment != null &&
+                        _selectedDepartment!.isNotEmpty &&
+                        !_isSubmitting
                     ? _submitRoleAndDepartment
                     : null,
                 style: ElevatedButton.styleFrom(
@@ -285,9 +319,41 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
 
     try {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      
+      // Validate full name
+      final fullName = _fullNameController.text.trim();
+      if (fullName.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Vui lòng nhập họ và tên'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        setState(() {
+          _isSubmitting = false;
+        });
+        return;
+      }
+      
+      // Validate department (MUST be non-null before calling provider)
+      if (_selectedDepartment == null || _selectedDepartment!.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Vui lòng chọn phòng ban'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        setState(() {
+          _isSubmitting = false;
+        });
+        return;
+      }
+      
+      // Use non-null assertion after validation
       await authProvider.submitRoleAndDepartment(
         _selectedRole!,
-        _selectedDepartment,
+        _selectedDepartment!, // Non-null assertion
+        fullName: fullName,
       );
 
       if (mounted) {

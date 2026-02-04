@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/user_model.dart';
 import '../models/user_role.dart';
 import '../components/participant_selection_widget.dart';
+import '../models/meeting_model.dart';
 
 class ParticipantSelectorCard extends StatelessWidget {
   final List<UserModel> selectedParticipants;
@@ -396,7 +397,10 @@ class ParticipantSelectorCard extends StatelessWidget {
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: () {
+                      if (!context.mounted) return;
+                      Navigator.pop(context);
+                    },
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(

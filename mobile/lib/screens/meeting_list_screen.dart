@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../providers/auth_provider.dart';
 import '../providers/meeting_provider.dart';
+import '../providers/notification_provider.dart';
 import '../models/meeting_model.dart';
 import '../models/user_model.dart';
 import '../models/user_role.dart' hide MeetingStatus;
@@ -15,27 +16,13 @@ class MeetingListScreen extends StatefulWidget {
   State<MeetingListScreen> createState() => _MeetingListScreenState();
 }
 
-class _MeetingListScreenState extends State<MeetingListScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  int _currentIndex = 0;
+class _MeetingListScreenState extends State<MeetingListScreen> {
+  MeetingListType _selectedType = MeetingListType.today;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
-    _tabController.addListener(() {
-      setState(() {
-        _currentIndex = _tabController.index;
-      });
-    });
     _loadMeetings();
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
   }
 
   void _loadMeetings() {
@@ -51,73 +38,25 @@ class _MeetingListScreenState extends State<MeetingListScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.grey.shade800,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-        surfaceTintColor: Colors.white,
-        shadowColor: Colors.grey.withOpacity(0.1),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(60),
-          child: Container(
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: TabBar(
-              controller: _tabController,
-              indicator: BoxDecoration(
-                color: const Color(0xFF2E7BE9),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              indicatorPadding: const EdgeInsets.all(4),
-              tabAlignment: TabAlignment.fill,
-              indicatorSize: TabBarIndicatorSize.tab,
-              labelColor: Colors.white,
-              unselectedLabelColor: Colors.grey.shade600,
-              labelStyle: const TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 12,
-              ),
-              unselectedLabelStyle: const TextStyle(
-                fontWeight: FontWeight.w500,
-                fontSize: 12,
-              ),
-              dividerColor: Colors.transparent,
-              tabs: const [
-                Tab(
-                  text: 'Tất cả',
-                  icon: Icon(Icons.list_outlined, size: 18),
-                ),
-                Tab(
-                  text: 'Chờ phê duyệt',
-                  icon: Icon(Icons.pending_outlined, size: 18),
-                ),
-                Tab(
-                  text: 'Của tôi',
-                  icon: Icon(Icons.person_outlined, size: 18),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+      backgroundColor: const Color(0xFFF8F9FD),
       body: Consumer<AuthProvider>(
         builder: (context, authProvider, child) {
           if (authProvider.userModel == null) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          return TabBarView(
-            controller: _tabController,
+          return Column(
             children: [
-              _buildMeetingList(authProvider.userModel!, MeetingListType.all),
-              _buildMeetingList(
-                  authProvider.userModel!, MeetingListType.pending),
-              _buildMeetingList(
-                  authProvider.userModel!, MeetingListType.myMeetings),
+              // Dashboard Cards Grid
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: _buildDashboardCards(authProvider.userModel!),
+              ),
+              
+              // Meeting List
+              Expanded(
+                child: _buildMeetingList(authProvider.userModel!, _selectedType),
+              ),
             ],
           );
         },
@@ -126,22 +65,155 @@ class _MeetingListScreenState extends State<MeetingListScreen>
         builder: (context, authProvider, child) {
           if (authProvider.userModel == null) return const SizedBox();
 
-          // Kiểm tra quyền tạo cuộc họp
           final canCreate =
               authProvider.userModel!.getAllowedMeetingTypes().isNotEmpty;
 
           if (canCreate) {
             return FloatingActionButton(
               onPressed: () => _navigateToCreateMeeting(),
-              backgroundColor: const Color(0xFF2E7BE9),
+              backgroundColor: const Color(0xFF9B7FED),
               foregroundColor: Colors.white,
               elevation: 4,
               shape: const CircleBorder(),
-              child: const Icon(Icons.videocam, size: 24),
+              child: const Icon(Icons.add, size: 32),
             );
           }
           return const SizedBox();
         },
+      ),
+    );
+  }
+
+  Widget _buildDashboardCards(UserModel currentUser) {
+    final meetingProvider = Provider.of<MeetingProvider>(context);
+    final allMeetings = meetingProvider.meetings;
+    
+    // Calculate counts
+    final todayCount = allMeetings.where((m) {
+      final now = DateTime.now();
+      return m.startTime.year == now.year &&
+             m.startTime.month == now.month &&
+             m.startTime.day == now.day;
+    }).length;
+    
+    final allCount = allMeetings.length;
+    
+    final pendingCount = allMeetings.where((m) => m.isPending).length;
+    
+    final myMeetingsCount = allMeetings.where((m) =>
+        m.creatorId == currentUser.id ||
+        m.participants.any((p) => p.userId == currentUser.id)
+    ).length;
+
+    return GridView.count(
+      crossAxisCount: 2,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      mainAxisSpacing: 12,
+      crossAxisSpacing: 12,
+      childAspectRatio: 1.3, // Increased from 1.6 to give more height
+      children: [
+        _buildDashboardCard(
+          title: 'Hôm nay',
+          count: todayCount,
+          icon: Icons.today_rounded,
+          color: const Color(0xFFB8C5F2), // Light blue-purple
+          isSelected: _selectedType == MeetingListType.today,
+          onTap: () => setState(() => _selectedType = MeetingListType.today),
+        ),
+        _buildDashboardCard(
+          title: 'Tất cả',
+          count: allCount,
+          icon: Icons.calendar_month_rounded,
+          color: const Color(0xFFFFF9B1), // Light yellow
+          isSelected: _selectedType == MeetingListType.all,
+          onTap: () => setState(() => _selectedType = MeetingListType.all),
+        ),
+        _buildDashboardCard(
+          title: 'Chờ duyệt',
+          count: pendingCount,
+          icon: Icons.pending_actions_rounded,
+          color: const Color(0xFFCBF3E7), // Light cyan/mint
+          isSelected: _selectedType == MeetingListType.pending,
+          onTap: () => setState(() => _selectedType = MeetingListType.pending),
+        ),
+        _buildDashboardCard(
+          title: 'Của tôi',
+          count: myMeetingsCount,
+          icon: Icons.person_rounded,
+          color: const Color(0xFFFDD7E8), // Light pink
+          isSelected: _selectedType == MeetingListType.myMeetings,
+          onTap: () => setState(() => _selectedType = MeetingListType.myMeetings),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDashboardCard({
+    required String title,
+    required int count,
+    required IconData icon,
+    required Color color,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(20),
+          border: isSelected 
+              ? Border.all(color: const Color(0xFF9B7FED), width: 3)
+              : null,
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFF9B7FED).withOpacity(0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ]
+              : [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.7),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: Colors.grey.shade700, size: 20),
+            ),
+            const Spacer(),
+            Text(
+              title,
+              style: TextStyle(
+                color: Colors.grey.shade800,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              count.toString(),
+              style: const TextStyle(
+                color: Color(0xFF2D2D2D),
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -155,6 +227,14 @@ class _MeetingListScreenState extends State<MeetingListScreen>
 
         List<MeetingModel> meetings = [];
         switch (type) {
+          case MeetingListType.today:
+            final now = DateTime.now();
+            meetings = meetingProvider.meetings.where((m) {
+              return m.startTime.year == now.year &&
+                     m.startTime.month == now.month &&
+                     m.startTime.day == now.day;
+            }).toList();
+            break;
           case MeetingListType.all:
             meetings = meetingProvider.meetings;
             break;
@@ -210,71 +290,59 @@ class _MeetingListScreenState extends State<MeetingListScreen>
 
     return Center(
       child: Container(
-        padding: const EdgeInsets.all(40),
-        margin: const EdgeInsets.all(32),
+        padding: const EdgeInsets.symmetric(vertical: 60, horizontal: 40),
+        margin: const EdgeInsets.symmetric(horizontal: 40),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: Colors.grey.withOpacity(0.1),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
             ),
           ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Icon with circular background
             Container(
-              padding: const EdgeInsets.all(20),
+              width: 80,
+              height: 80,
               decoration: BoxDecoration(
-                color: const Color(0xFF2E7BE9).withOpacity(0.1),
+                color: const Color(0xFFE3F2FD), // Light blue background
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 icon,
-                size: 48,
-                color: const Color(0xFF2E7BE9),
+                size: 40,
+                color: const Color(0xFF2196F3), // Blue icon
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
+            
+            // Message text (removed subtitle for cleaner look)
             Text(
               message,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey.shade800,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF424242),
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 8),
-            Text(
-              subtitle,
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey.shade600,
-              ),
-              textAlign: TextAlign.center,
-            ),
+            
+            // Only show button for myMeetings type
             if (type == MeetingListType.myMeetings) ...[
-              const SizedBox(height: 24),
-              ElevatedButton.icon(
-                onPressed: () => _navigateToCreateMeeting(),
-                icon: const Icon(Icons.add, size: 20),
-                label: const Text('Tạo cuộc họp đầu tiên'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2E7BE9),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 12,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 0,
+              const SizedBox(height: 8),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey.shade500,
                 ),
+                textAlign: TextAlign.center,
               ),
             ],
           ],
@@ -284,188 +352,210 @@ class _MeetingListScreenState extends State<MeetingListScreen>
   }
 
   Widget _buildMeetingCard(MeetingModel meeting, UserModel currentUser) {
-    final statusColor = _getStatusColor(meeting.status);
-
     return GestureDetector(
       onTap: () => _showMeetingDetails(meeting),
       child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
+        margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.grey.withOpacity(0.1),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
-        child: Column(
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header với status dot, title và menu
-            Row(
-              children: [
-                // Status dot
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: statusColor,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
+            // 1. Icon Box
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: const Color(0xFFEBEBF0), // Light greyish background from image
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.videocam_rounded, // Assuming video meetings based on image
+                color: Color(0xFF2C1B47), // Dark purple/indigo
+                size: 24,
+              ),
+            ),
+            
+            const SizedBox(width: 12),
+            
+            // 2. Info Column
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Title
+                  Text(
                     meeting.title,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: Colors.grey.shade800,
+                      color: Color(0xFF1A1A1A),
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                ),
-                if (_canManageMeeting(meeting, currentUser))
-                  PopupMenuButton<String>(
-                    icon: Icon(
-                      Icons.more_vert,
-                      color: Colors.grey.shade400,
-                      size: 24,
-                    ),
-                    padding: const EdgeInsets.all(8),
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(
-                        value: 'view',
-                        child: Text('Xem chi tiết'),
+                  const SizedBox(height: 6),
+                  
+                  // Time Row
+                  Row(
+                    children: [
+                      const Icon(Icons.access_time_rounded, size: 14, color: Colors.grey),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${DateFormat('HH:mm').format(meeting.startTime)} - ${DateFormat('HH:mm').format(meeting.endTime)} • ${DateFormat('dd/MM').format(meeting.startTime)}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey.shade600,
+                        ),
                       ),
-                      if (meeting.isPending &&
-                          _canApproveMeeting(currentUser)) ...[
-                        const PopupMenuItem(
-                          value: 'approve',
-                          child: Text('Phê duyệt'),
-                        ),
-                        const PopupMenuItem(
-                          value: 'reject',
-                          child: Text('Từ chối'),
-                        ),
-                      ],
-                      if (meeting.creatorId == currentUser.id ||
-                          currentUser.isSuperAdmin ||
-                          currentUser.isAdmin) ...[
-                        const PopupMenuItem(
-                          value: 'edit',
-                          child: Text('Chỉnh sửa'),
-                        ),
-                        const PopupMenuItem(
-                          value: 'delete',
-                          child: Text('Xóa'),
-                        ),
-                      ],
                     ],
-                    onSelected: (value) => _handleMeetingAction(value, meeting),
                   ),
-              ],
-            ),
-            const SizedBox(height: 8),
-
-            // Subtitle với thông tin thời gian
-            Text(
-              _getMeetingSubtitle(meeting),
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.grey.shade600,
-                fontWeight: FontWeight.w500,
+                  
+                  const SizedBox(height: 4),
+                  
+                  // Location & People Row
+                  Row(
+                    children: [
+                      const Icon(Icons.location_on_outlined, size: 14, color: Colors.grey),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          meeting.locationType == MeetingLocationType.virtual
+                              ? 'Online'
+                              : (meeting.physicalLocation ?? 'Chưa có địa điểm'),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Icon(Icons.people_outline_rounded, size: 14, color: Colors.grey),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${meeting.participants.length} người',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 12),
-
-            // Thông tin địa điểm
-            Row(
-              children: [
-                Icon(
-                  meeting.isVirtual ? Icons.videocam : Icons.location_on,
-                  size: 16,
-                  color: Colors.grey.shade500,
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    meeting.isVirtual
-                        ? 'Trực tuyến'
-                        : (meeting.physicalLocation ?? 'Chưa có địa điểm'),
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey.shade600,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-
-            // Thông tin số người tham gia
-            Row(
-              children: [
-                Icon(
-                  Icons.group,
-                  size: 16,
-                  color: Colors.grey.shade500,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  '${_getParticipantCount(meeting)} người tham gia',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.grey.shade600,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // Tags row
-            Row(
-              children: [
-                _buildSimpleChip(_getMeetingTypeText(meeting.type),
-                    Colors.blue.shade100, Colors.blue.shade800),
-                const SizedBox(width: 8),
-                _buildSimpleChip(
-                    _getPriorityText(meeting.priority),
-                    _getPriorityColor(meeting.priority).withOpacity(0.1),
-                    _getPriorityColor(meeting.priority)),
-                const Spacer(),
-                // Status chip góc phải
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: statusColor,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    _getStatusText(meeting.status),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+            
+            // 3. Status Chip
+            _buildStatusBadge(meeting),
           ],
         ),
       ),
     );
   }
+
+
+  Widget _buildStatusBadge(MeetingModel meeting) {
+    final now = DateTime.now();
+    final isPast = meeting.endTime.isBefore(now);
+    
+    // If meeting has passed and is approved, treat as completed
+    if (isPast && meeting.status == MeetingStatus.approved) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: const Color(0xFFEBEBF0),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: const Text(
+          'Hoàn thành',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF2C1B47),
+          ),
+        ),
+      );
+    }
+    
+    // If meeting is completed status
+    if (meeting.status == MeetingStatus.completed) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: const Color(0xFFEBEBF0),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: const Text(
+          'Hoàn thành',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF2C1B47),
+          ),
+        ),
+      );
+    }
+    
+    // Otherwise show status-based badge
+    return _buildStatusBadgeOnly(meeting.status);
+  }
+
+  Widget _buildStatusBadgeOnly(MeetingStatus status) {
+     Color color;
+     String text;
+     switch (status) {
+       case MeetingStatus.pending:
+         color = Colors.orange;
+         text = 'Chờ duyệt';
+         break;
+       case MeetingStatus.approved:
+         color = Colors.green;
+         text = 'Sắp tới'; // Or 'Đã duyệt'
+         break;
+       case MeetingStatus.rejected:
+         color = Colors.red;
+         text = 'Từ chối';
+         break;
+       case MeetingStatus.cancelled:
+         color = Colors.grey;
+         text = 'Đã hủy';
+         break;
+       default:
+         color = Colors.blue;
+         text = 'Mới';
+     }
+     
+     return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          text,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: color.withOpacity(0.8),
+          ),
+        ),
+      );
+  }
+
+  // ... (keep helper methods)
+
 
   Widget _buildSimpleChip(String text, Color bgColor, Color textColor) {
     return Container(
@@ -675,13 +765,13 @@ class _MeetingListScreenState extends State<MeetingListScreen>
   Color _getPriorityColor(MeetingPriority priority) {
     switch (priority) {
       case MeetingPriority.low:
-        return Colors.green;
+        return const Color(0xFF4CAF50); // Green
       case MeetingPriority.medium:
-        return Colors.orange;
+        return const Color(0xFF9B59B6); // Purple
       case MeetingPriority.high:
-        return Colors.red;
+        return const Color(0xFF9B7FED); // Light purple
       case MeetingPriority.urgent:
-        return Colors.red.shade900;
+        return const Color(0xFFFF6B6B); // Coral/Red
     }
   }
 
@@ -1002,9 +1092,15 @@ class _MeetingListScreenState extends State<MeetingListScreen>
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final meetingProvider =
         Provider.of<MeetingProvider>(context, listen: false);
+    final notificationProvider =
+        Provider.of<NotificationProvider>(context, listen: false);
 
     if (authProvider.userModel != null) {
-      meetingProvider.approveMeeting(meeting.id, authProvider.userModel!);
+      meetingProvider.approveMeeting(
+        meeting.id,
+        authProvider.userModel!,
+        notificationProvider: notificationProvider,
+      );
     }
   }
 
@@ -1012,13 +1108,18 @@ class _MeetingListScreenState extends State<MeetingListScreen>
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final meetingProvider =
         Provider.of<MeetingProvider>(context, listen: false);
+    final notificationProvider =
+        Provider.of<NotificationProvider>(context, listen: false);
+
+    final TextEditingController reasonController = TextEditingController();
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Từ chối cuộc họp'),
-        content: const TextField(
-          decoration: InputDecoration(
+        content: TextField(
+          controller: reasonController,
+          decoration: const InputDecoration(
             labelText: 'Lý do từ chối',
             border: OutlineInputBorder(),
           ),
@@ -1031,7 +1132,24 @@ class _MeetingListScreenState extends State<MeetingListScreen>
           ),
           TextButton(
             onPressed: () {
-              // TODO: Implement reject with reason
+              if (reasonController.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Vui lòng nhập lý do từ chối'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+
+              if (authProvider.userModel != null) {
+                meetingProvider.rejectMeeting(
+                  meeting.id,
+                  authProvider.userModel!,
+                  reason: reasonController.text.trim(),
+                  notificationProvider: notificationProvider,
+                );
+              }
               Navigator.pop(context);
             },
             child: const Text('Từ chối'),
@@ -1083,9 +1201,176 @@ class _MeetingListScreenState extends State<MeetingListScreen>
       ),
     );
   }
+
+  // Helper method to get gradient for card based on priority
+  LinearGradient _getCardGradient(MeetingModel meeting) {
+    switch (meeting.priority) {
+      case MeetingPriority.urgent:
+        return const LinearGradient(
+          colors: [Color(0xFFFF6B6B), Color(0xFFFF8E8E)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        );
+      case MeetingPriority.high:
+        return const LinearGradient(
+          colors: [Color(0xFF9B7FED), Color(0xFFB89FFF)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        );
+      default:
+        return const LinearGradient(
+          colors: [Colors.white, Colors.white],
+        );
+    }
+  }
+
+  // Build rounded badge
+  Widget _buildRoundedBadge(String text, Color color, bool isOnGradient) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: isOnGradient ? Colors.white.withOpacity(0.25) : color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: isOnGradient ? Colors.white : color,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+
+
+  // Build participant avatars
+  Widget _buildParticipantAvatars(MeetingModel meeting, bool isOnGradient) {
+    final participantCount = _getParticipantCount(meeting);
+    
+    // Mock participant data - in real app, this would come from meeting.participants
+    final mockParticipants = List.generate(
+      participantCount > 3 ? 3 : participantCount,
+      (index) => 'User ${index + 1}',
+    );
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Show up to 3 avatars
+        ...mockParticipants.asMap().entries.map((entry) {
+          final index = entry.key;
+          final name = entry.value;
+          return Container(
+            margin: EdgeInsets.only(left: index > 0 ? 0 : 0),
+            transform: Matrix4.translationValues(index * -6.0, 0, 0),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 2),
+            ),
+            child: CircleAvatar(
+              radius: 13,
+              backgroundColor: _getAvatarColor(index),
+              child: Text(
+                name.substring(0, 1).toUpperCase(),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+        
+        // Show count badge if more than 3 participants
+        if (participantCount > 3)
+          Container(
+            margin: const EdgeInsets.only(left: 0),
+            transform: Matrix4.translationValues(-6.0 * 3, 0, 0),
+            child: CircleAvatar(
+              radius: 13,
+              backgroundColor: const Color(0xFF9B7FED),
+              child: Text(
+                '+${participantCount - 3}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  // Get avatar color based on index
+  Color _getAvatarColor(int index) {
+    final colors = [
+      const Color(0xFF4CAF50),
+      const Color(0xFF2196F3),
+      const Color(0xFFFF9800),
+      const Color(0xFFE91E63),
+      const Color(0xFF9C27B0),
+    ];
+    return colors[index % colors.length];
+  }
+  }
+
+
+class MeetingCardClipper extends CustomClipper<Path> {
+  final double radius;
+  final double notchSize;
+
+  MeetingCardClipper({this.radius = 24, this.notchSize = 48});
+
+  @override
+  Path getClip(Size size) {
+    final w = size.width;
+    final h = size.height;
+    final path = Path();
+
+    // Start from top-left
+    path.moveTo(0, radius);
+    path.quadraticBezierTo(0, 0, radius, 0);
+
+    // Top line to notch start
+    path.lineTo(w - notchSize - radius / 2, 0);
+
+    // Notch curve (smooth S-shape or scoop)
+    path.quadraticBezierTo(
+      w - notchSize / 3, 0, // Control point near top edge
+      w - notchSize / 3, notchSize / 3, // Mid point
+    );
+    path.quadraticBezierTo(
+       w, notchSize/3, // Control point near right edge
+       w, notchSize // End point
+    );
+
+    // Right line
+    path.lineTo(w, h - radius);
+
+    // Bottom-right corner
+    path.quadraticBezierTo(w, h, w - radius, h);
+
+    // Bottom line
+    path.lineTo(radius, h);
+
+    // Bottom-left corner
+    path.quadraticBezierTo(0, h, 0, h - radius);
+
+    path.close();
+    return path;
+  }
+
+  @override
+  bool shouldReclip(CustomClipper<Path> oldClipper) => true;
 }
 
 enum MeetingListType {
+  today,
   all,
   pending,
   myMeetings,

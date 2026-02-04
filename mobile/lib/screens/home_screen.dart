@@ -13,13 +13,14 @@ import 'meeting_list_screen.dart';
 import 'room_management_screen.dart';
 import 'meeting_create_screen.dart';
 import 'settings_screen.dart';
-import 'setup_super_admin_screen.dart';
+
 import 'package:metting_app/components/menu_item.dart';
 import 'admin_dashboard_screen.dart';
 import 'notification_screen.dart';
 import 'package:metting_app/providers/notification_provider.dart';
 import 'calendar_screen.dart';
 import 'package:intl/intl.dart';
+import 'minutes_archive_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -103,23 +104,31 @@ class _HomeScreenState extends State<HomeScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return ZoomDrawer(
-      controller: zoomDrawerController,
-      menuBackgroundColor: isDark ? colorScheme.surface : Colors.white,
-      shadowLayer1Color:
-          isDark ? colorScheme.surfaceVariant : const Color(0xFFF5F5F5),
-      shadowLayer2Color: isDark
-          ? colorScheme.surfaceVariant.withOpacity(0.7)
-          : const Color(0xFFE6E6E6).withOpacity(0.3),
-      borderRadius: 32.0,
-      showShadow: true,
-      style: DrawerStyle.defaultStyle,
-      angle: -12.0,
-      drawerShadowsBackgroundColor:
-          isDark ? Colors.black38 : Colors.grey.shade300,
-      slideWidth: MediaQuery.of(context).size.width * 0.7,
-      menuScreen: _buildMenuScreen(context),
-      mainScreen: _buildMainScreen(context),
+
+    return WillPopScope(
+      onWillPop: () async {
+        // Prevent back button from exiting the app/going to login
+        // Instead, do nothing or show exit confirmation
+        return false;
+      },
+      child: ZoomDrawer(
+        controller: zoomDrawerController,
+        menuBackgroundColor: isDark ? colorScheme.surface : Colors.white,
+        shadowLayer1Color:
+            isDark ? colorScheme.surfaceVariant : const Color(0xFFF5F5F5),
+        shadowLayer2Color: isDark
+            ? colorScheme.surfaceVariant.withOpacity(0.7)
+            : const Color(0xFFE6E6E6).withOpacity(0.3),
+        borderRadius: 32.0,
+        showShadow: true,
+        style: DrawerStyle.defaultStyle,
+        angle: -12.0,
+        drawerShadowsBackgroundColor:
+            isDark ? Colors.black38 : Colors.grey.shade300,
+        slideWidth: MediaQuery.of(context).size.width * 0.7,
+        menuScreen: _buildMenuScreen(context),
+        mainScreen: _buildMainScreen(context),
+      ),
     );
   }
 
@@ -217,89 +226,102 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 40),
               // Menu items với chức năng quản lý
+              // Menu items với chức năng quản lý
               Expanded(
                 child: Consumer<app_auth.AuthProvider>(
                   builder: (context, authProvider, child) {
                     final userModel = authProvider.userModel;
-                    final isAdmin = userModel?.isAdmin == true;
-                    final isDirector = userModel?.isDirector == true;
+                    final isGlobalAdmin = userModel?.role == UserRole.admin;
+                    // final isAdmin = userModel?.isAdmin == true; // Replaced by isGlobalAdmin check
 
-                    return Column(
-                      children: [
-                        MenuItem(
-                          title: 'Tạo Cuộc Họp',
-                          icon: IconlyBold.plus,
-                          isSelected: false,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    const MeetingCreateScreen(),
-                              ),
-                            );
-                            zoomDrawerController.close?.call();
-                          },
-                        ),
-                        // Chỉ hiển thị cho Admin và Director
-                        if (isAdmin || isDirector) ...[
-                          const SizedBox(height: 8),
-                          Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 16),
-                            child: Divider(
-                              color: colorScheme.outline.withOpacity(0.2),
-                              thickness: 1,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
+                    return SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      child: Column(
+                        children: [
                           MenuItem(
-                            title: 'Quản lý hệ thống',
-                            icon: Icons.admin_panel_settings_outlined,
+                            title: 'Tạo Cuộc Họp',
+                            icon: IconlyBold.plus,
                             isSelected: false,
                             onTap: () {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
                                   builder: (context) =>
-                                      const AdminDashboardScreen(),
+                                      const MeetingCreateScreen(),
                                 ),
                               );
                               zoomDrawerController.close?.call();
                             },
                           ),
-                        ],
-                        const Spacer(),
-                        MenuItem(
-                          title: 'Giới Thiệu',
-                          icon: Icons.info_rounded,
-                          isSelected: false,
-                          onTap: () {
-                            showAboutDialog(
-                              context: context,
-                              applicationName: 'Meeting App',
-                              applicationVersion: '1.0.0',
-                              applicationIcon: Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: colorScheme.primary,
-                                  borderRadius: BorderRadius.circular(12),
+                          Divider(
+                            color: Colors.grey.shade300,
+                            thickness: 0.5,
+                            indent: 16,
+                            endIndent: 16,
+                            height: 24, // Combine height with SizedBox functionality
+                          ),
+                          
+                          MenuItem(
+                            title: 'Lịch cuộc họp',
+                            icon: IconlyBold.calendar,
+                            isSelected: _selectedIndex == 2,
+                            onTap: () {
+                              _onMenuItemTapped(2);
+                            },
+                          ),
+                          Divider(
+                            color: Colors.grey.shade300,
+                            thickness: 0.5,
+                            indent: 16,
+                            endIndent: 16,
+                            height: 24,
+                          ),
+                          
+                          MenuItem(
+                            title: 'Biên bản cuộc họp',
+                            icon: IconlyBold.document,
+                            isSelected: false,
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      const MinutesArchiveScreen(),
                                 ),
-                                child: Icon(
-                                  IconlyBold.video,
-                                  color: Colors.white,
-                                  size: 24,
-                                ),
+                              );
+                              zoomDrawerController.close?.call();
+                            },
+                          ),
+
+                          // Chỉ hiển thị cho Global Admin
+                          if (isGlobalAdmin) ...[
+                            const SizedBox(height: 12),
+                            Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 16),
+                              child: Divider(
+                                color: colorScheme.outline.withOpacity(0.2),
+                                thickness: 1,
                               ),
-                              children: [
-                                const Text(
-                                  'Ứng dụng quản lý cuộc họp hiện đại với giao diện đẹp và tính năng đầy đủ.',
-                                ),
-                              ],
-                            );
-                            zoomDrawerController.close?.call();
-                          },
-                        ),
-                      ],
+                            ),
+                            const SizedBox(height: 12),
+                            MenuItem(
+                              title: 'Quản lý hệ thống',
+                              icon: Icons.settings_outlined,
+                              isSelected: false,
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        const AdminDashboardScreen(),
+                                  ),
+                                );
+                                zoomDrawerController.close?.call();
+                              },
+                            ),
+                          ],
+                        ],
+                      ),
                     );
                   },
                 ),

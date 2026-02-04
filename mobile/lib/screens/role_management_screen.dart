@@ -13,8 +13,13 @@ class RoleManagementScreen extends StatefulWidget {
 
 class _RoleManagementScreenState extends State<RoleManagementScreen> {
   List<UserModel> _users = [];
+  List<UserModel> _filteredUsers = [];
   bool _isLoading = false;
   String? _errorMessage;
+  
+  // Search & Filter state
+  String _searchQuery = '';
+  String _selectedFilter = 'Tất cả';
 
   @override
   void initState() {
@@ -37,6 +42,7 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
       if (mounted) {
         setState(() {
           _users = users ?? []; // Đảm bảo không null
+          _filteredUsers = _users;
           _isLoading = false;
         });
       }
@@ -66,15 +72,31 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF6F7FB),
       appBar: AppBar(
-        title: const Text('Quản lý vai trò'),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF1A1A1A), size: 20),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: const Text(
+          'Quản lý vai trò',
+          style: TextStyle(
+            color: Color(0xFF1A1A1A),
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+          ),
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.search_rounded, color: Color(0xFF1A1A1A)),
+            onPressed: _showSearchDialog,
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded, color: Color(0xFF1A1A1A)),
             onPressed: _loadUsers,
-            tooltip: 'Tải lại',
           ),
         ],
       ),
@@ -85,31 +107,26 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
   }
 
   Widget _buildContent() {
-    // Hiển thị lỗi nếu có
     if (_errorMessage != null) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.error_outline,
-              size: 64,
-              color: Colors.red,
-            ),
+            Icon(Icons.error_outline_rounded, size: 48, color: Colors.red.shade300),
             const SizedBox(height: 16),
             Text(
               'Có lỗi xảy ra',
-              style: Theme.of(context).textTheme.headlineSmall,
+              style: TextStyle(fontSize: 16, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
-            Text(
-              _errorMessage!,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.grey),
-            ),
+            Text(_errorMessage!, style: TextStyle(color: Colors.grey.shade500)),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: _loadUsers,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF9B7FED),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
               child: const Text('Thử lại'),
             ),
           ],
@@ -117,34 +134,33 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
       );
     }
 
-    // Hiển thị danh sách rỗng
-    if (_users.isEmpty) {
+    if (_filteredUsers.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.people_outline,
+            Icon(
+              _searchQuery.isNotEmpty || _selectedFilter != 'Tất cả'
+                  ? Icons.search_off_rounded
+                  : Icons.people_outline_rounded,
               size: 64,
-              color: Colors.grey,
+              color: Colors.grey.shade300,
             ),
             const SizedBox(height: 16),
-            const Text(
-              'Không có người dùng nào',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w500,
-              ),
+            Text(
+              _searchQuery.isNotEmpty || _selectedFilter != 'Tất cả'
+                  ? 'Không tìm thấy kết quả'
+                  : 'Không có người dùng nào',
+              style: TextStyle(fontSize: 16, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
             ),
-            const SizedBox(height: 8),
-            const Text(
-              'Hoặc bạn không có quyền truy cập danh sách người dùng.',
-              style: TextStyle(color: Colors.grey),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             ElevatedButton(
               onPressed: _loadUsers,
+              style: ElevatedButton.styleFrom(
+                 backgroundColor: const Color(0xFF9B7FED),
+                 foregroundColor: Colors.white,
+                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
               child: const Text('Tải lại'),
             ),
           ],
@@ -152,68 +168,298 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
       );
     }
 
-    // Hiển thị danh sách người dùng
-    return RefreshIndicator(
-      onRefresh: _loadUsers,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: _users.length,
-        itemBuilder: (context, index) {
-          // Kiểm tra index hợp lệ
-          if (index < 0 || index >= _users.length) {
-            return const SizedBox.shrink();
-          }
-
-          final user = _users[index];
-          return _buildUserCard(user);
-        },
+    // Filter Bar (Mock)
+    return Column(
+      children: [
+        // Filter Bar
+        Container(
+          color: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildFilterChip('Tất cả', isSelected: _selectedFilter == 'Tất cả'),
+                const SizedBox(width: 8),
+                _buildFilterChip('Director', isSelected: _selectedFilter == 'Director'),
+                const SizedBox(width: 8),
+                _buildFilterChip('Manager', isSelected: _selectedFilter == 'Manager'),
+                const SizedBox(width: 8),
+                _buildFilterChip('Chờ duyệt', isSelected: _selectedFilter == 'Chờ duyệt'),
+              ],
+            ),
+          ),
+        ),
+        
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _loadUsers,
+            color: const Color(0xFF9B7FED),
+            child: ListView.separated(
+              padding: const EdgeInsets.all(16),
+              itemCount: _filteredUsers.length,
+              separatorBuilder: (context, index) => const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                final user = _filteredUsers[index];
+                return _buildUserCard(user);
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+  
+  Widget _buildFilterChip(String label, {bool isSelected = false}) {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedFilter = label;
+          _applyFilters();
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF1A1A1A) : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF1A1A1A) : Colors.grey.shade300,
+            width: 0.5,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : Colors.grey.shade700,
+            fontSize: 13,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+          ),
+        ),
       ),
     );
   }
 
+  void _showSearchDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        contentPadding: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Tìm kiếm người dùng'),
+        content: TextField(
+          autofocus: true,
+          decoration: InputDecoration(
+            hintText: 'Tìm theo tên, email, phòng ban...',
+            prefixIcon: const Icon(Icons.search),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+          onChanged: (value) {
+            setState(() {
+              _searchQuery = value.toLowerCase();
+              _applyFilters();
+            });
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _searchQuery = '';
+                _applyFilters();
+              });
+              Navigator.pop(context);
+            },
+            child: const Text('Xóa'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Đóng'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _applyFilters() {
+    List<UserModel> result = _users;
+
+    // Apply search query
+    if (_searchQuery.isNotEmpty) {
+      result = result.where((user) {
+        final name = user.displayName.toLowerCase();
+        final email = user.email.toLowerCase();
+        final dept = (user.departmentName ?? '').toLowerCase();
+        return name.contains(_searchQuery) ||
+               email.contains(_searchQuery) ||
+               dept.contains(_searchQuery);
+      }).toList();
+    }
+
+    // Apply role filter
+    if (_selectedFilter != 'Tất cả') {
+      if (_selectedFilter == 'Chờ duyệt') {
+        result = result.where((user) => !user.isRoleApproved && user.pendingRole != null).toList();
+      } else {
+        result = result.where((user) => _getRoleName(user.role) == _selectedFilter).toList();
+      }
+    }
+
+    setState(() {
+      _filteredUsers = result;
+    });
+  }
+
   Widget _buildUserCard(UserModel user) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          onTap: () {
+            // Future enhancement: Open detail view
+            // For now, trigger menu for quick actions
+          },
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
               children: [
-                _buildUserAvatar(user),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _getSafeDisplayName(user),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
+                // Top Row: Avatar + Name/Email + Action
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildUserAvatar(user),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _getSafeDisplayName(user),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                              color: Color(0xFF1A1A1A),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _getSafeEmail(user),
+                            style: TextStyle(
+                              color: Colors.grey.shade500,
+                              fontSize: 13,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _getSafeEmail(user),
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                    _buildPopupMenu(user),
+                  ],
                 ),
-                _buildPopupMenu(user),
+                
+                const SizedBox(height: 12),
+                const Divider(height: 1, thickness: 0.5),
+                const SizedBox(height: 12),
+                
+                // Info Rows
+                _buildInfoRow(
+                  'Vai trò:', 
+                  _getRoleName(user.role), 
+                  valueColor: _getRoleTextColor(user.role),
+                  icon: Icons.badge_outlined,
+                ),
+                
+                if (user.departmentName?.isNotEmpty == true) ...[
+                  const SizedBox(height: 8),
+                  _buildInfoRow(
+                    'Phòng ban:', 
+                    user.departmentName!, 
+                    valueColor: Colors.blue.shade700,
+                    icon: Icons.business_outlined,
+                  ),
+                ],
+                
+                // Status Chip Row (if needed - e.g. Pending)
+                if (!user.isRoleApproved && user.pendingRole != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.schedule_rounded, size: 14, color: Colors.orange.shade700),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Chờ duyệt: ${_getPendingRoleName(user.pendingRole!.name)}',
+                          style: TextStyle(
+                            color: Colors.orange.shade700,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
-            const SizedBox(height: 12),
-            _buildUserStatus(user),
-          ],
+          ),
         ),
       ),
+    );
+  }
+  
+  Widget _buildInfoRow(String label, String value, {Color? valueColor, IconData? icon}) {
+    return Row(
+      children: [
+        if (icon != null) ...[
+          Icon(icon, size: 16, color: Colors.grey.shade400),
+          const SizedBox(width: 8),
+        ],
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            color: Colors.grey.shade600,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Container(
+           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+           decoration: BoxDecoration(
+             color: (valueColor ?? Colors.black).withOpacity(0.05),
+             borderRadius: BorderRadius.circular(6),
+           ),
+           child: Text(
+            value,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: valueColor ?? const Color(0xFF1A1A1A),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -223,16 +469,18 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
         displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
 
     return CircleAvatar(
+      radius: 20,
       backgroundImage: user.photoURL != null && user.photoURL!.isNotEmpty
           ? NetworkImage(user.photoURL!)
           : null,
-      backgroundColor: Colors.blue[100],
+      backgroundColor: const Color(0xFFF0F1F5),
       child: user.photoURL == null || user.photoURL!.isEmpty
           ? Text(
               avatarText,
-              style: TextStyle(
-                color: Colors.blue[800],
+              style: const TextStyle(
+                color: Color(0xFF9B7FED),
                 fontWeight: FontWeight.bold,
+                fontSize: 16,
               ),
             )
           : null,
@@ -240,86 +488,147 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
   }
 
   Widget _buildPopupMenu(UserModel user) {
-    return PopupMenuButton<String>(
-      onSelected: (String action) => _handleUserAction(user, action),
-      itemBuilder: (context) {
-        List<PopupMenuEntry<String>> items = [];
+    return SizedBox(
+      width: 32,
+      height: 32,
+      child: PopupMenuButton<String>(
+        padding: EdgeInsets.zero,
+        offset: const Offset(0, 8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        elevation: 3,
+        constraints: const BoxConstraints(minWidth: 200, maxWidth: 200),
+        color: Colors.white,
+        onSelected: (String action) => _handleUserAction(user, action),
+        itemBuilder: (context) {
+          List<PopupMenuEntry<String>> items = [];
 
-        // Nếu user chưa được duyệt và có vai trò chờ duyệt
-        if (!user.isRoleApproved && user.pendingRole != null) {
-          items.add(
-            PopupMenuItem(
-              value: 'approve',
-              child: Row(
-                children: [
-                  const Icon(Icons.check_circle, color: Colors.green, size: 20),
-                  const SizedBox(width: 8),
-                  const Text('Duyệt vai trò'),
-                ],
-              ),
-            ),
-          );
-          items.add(
-            PopupMenuItem(
-              value: 'reject',
-              child: Row(
-                children: [
-                  const Icon(Icons.cancel, color: Colors.red, size: 20),
-                  const SizedBox(width: 8),
-                  const Text('Từ chối'),
-                ],
-              ),
-            ),
-          );
-          items.add(const PopupMenuDivider());
-        }
-
-        // Thêm các vai trò để thay đổi
-        items.addAll(
-          UserRole.values.map((role) {
-            return PopupMenuItem(
-              value: 'change_${role.name}',
-              child: Row(
-                children: [
-                  Icon(
-                    _getRoleIcon(role),
-                    color: _getRoleColor(role),
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text('Đổi thành ${_getRoleName(role)}')),
-                  if (user.role == role)
-                    const Icon(Icons.check, color: Colors.green, size: 20),
-                ],
+          // Approval actions if pending
+          if (!user.isRoleApproved && user.pendingRole != null) {
+            items.add(
+              PopupMenuItem(
+                value: 'approve',
+                height: 46,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  children: [
+                    Icon(Icons.check_circle_outline_rounded, color: Colors.grey.shade700, size: 20),
+                    const SizedBox(width: 10),
+                    const Text(
+                      'Duyệt vai trò',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black87),
+                    ),
+                  ],
+                ),
               ),
             );
-          }).toList(),
-        );
-
-        // Thêm nút xóa user
-        items.add(const PopupMenuDivider());
-        items.add(
-          PopupMenuItem(
-            value: 'delete',
-            child: Row(
-              children: [
-                const Icon(Icons.delete, color: Colors.red, size: 20),
-                const SizedBox(width: 8),
-                const Text(
-                  'Xóa thành viên',
-                  style: TextStyle(color: Colors.red),
+            items.add(
+              PopupMenuItem(
+                value: 'reject',
+                height: 46,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  children: [
+                    Icon(Icons.cancel_outlined, color: Colors.grey.shade700, size: 20),
+                    const SizedBox(width: 10),
+                    const Text(
+                      'Từ chối',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black87),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-        );
+              ),
+            );
+            items.add(PopupMenuDivider(height: 1, thickness: 0.5));
+          }
 
-        return items;
-      },
-      icon: const Icon(Icons.more_vert),
-      tooltip: 'Thao tác',
+          // Role selection items
+          items.addAll(
+            UserRole.values.map((role) {
+              final isSelected = user.role == role;
+              
+              return PopupMenuItem(
+                value: 'change_${role.name}',
+                height: 46,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  children: [
+                    Icon(
+                      _getRoleIconForMenu(role),
+                      color: Colors.grey.shade700,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _getRoleName(role),
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: isSelected ? const Color(0xFF9B7FED) : Colors.black87,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (isSelected)
+                      const Icon(
+                        Icons.check_rounded,
+                        color: Color(0xFF9B7FED),
+                        size: 18,
+                      ),
+                  ],
+                ),
+              );
+            }).toList(),
+          );
+
+          // Delete action
+          items.add(PopupMenuDivider(height: 1, thickness: 0.5));
+          items.add(
+            PopupMenuItem(
+              value: 'delete',
+              height: 46,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                children: [
+                  Icon(Icons.delete_outline_rounded, color: Colors.red.shade600, size: 20),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Xóa',
+                    style: TextStyle(
+                      color: Colors.red.shade600,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+
+          return items;
+        },
+        icon: Icon(Icons.more_horiz_rounded, color: Colors.grey.shade400, size: 24),
+        tooltip: 'Thao tác',
+      ),
     );
   }
+
+  IconData _getRoleIconForMenu(UserRole role) {
+    switch (role) {
+      case UserRole.admin:
+        return Icons.admin_panel_settings_outlined;
+      case UserRole.director:
+        return Icons.work_outline_rounded;
+      case UserRole.manager:
+        return Icons.groups_outlined;
+      case UserRole.employee:
+        return Icons.person_outline_rounded;
+      case UserRole.guest:
+        return Icons.person_off_outlined;
+    }
+  }
+
+
 
   Widget _buildUserStatus(UserModel user) {
     return Column(
@@ -543,20 +852,7 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
     }
   }
 
-  IconData _getRoleIcon(UserRole role) {
-    switch (role) {
-      case UserRole.admin:
-        return Icons.admin_panel_settings;
-      case UserRole.director:
-        return Icons.manage_accounts;
-      case UserRole.manager:
-        return Icons.people;
-      case UserRole.employee:
-        return Icons.person;
-      case UserRole.guest:
-        return Icons.person_outline;
-    }
-  }
+
 
   String _getPendingRoleName(String pendingRole) {
     switch (pendingRole.toLowerCase()) {
@@ -572,6 +868,20 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
         return 'Guest';
       default:
         return pendingRole;
+    }
+  }
+
+  // Helper methods
+  Color _getRoleTextColor(UserRole role) {
+    switch (role) {
+      case UserRole.admin:
+        return Colors.red.shade700;
+      case UserRole.director:
+        return Colors.orange.shade800;
+      case UserRole.manager:
+        return Colors.blue.shade700;
+      default:
+        return Colors.grey.shade700;
     }
   }
 
@@ -719,7 +1029,7 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF9B7FED)),
             child: const Text('Xác nhận'),
           ),
         ],
@@ -805,7 +1115,7 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
     if (confirmed != true || !mounted) return;
 
     try {
-      await authProvider.deleteUserInDepartment(user.id);
+      await authProvider.deleteUser(user.id);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

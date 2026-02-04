@@ -63,6 +63,8 @@ void main() async {
   runApp(const MyApp());
 }
 
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -85,6 +87,7 @@ class MyApp extends StatelessWidget {
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {
           return MaterialApp(
+            navigatorKey: navigatorKey,
             title: 'Meeting Management',
             debugShowCheckedModeBanner: false,
             theme: themeProvider.lightTheme,
@@ -108,10 +111,12 @@ class MyApp extends StatelessWidget {
                         MeetingDetailScreen(meetingId: meetingId),
                   );
                 case '/meeting-minutes-editor':
-                  final minutesId = settings.arguments as String;
+                  final args = settings.arguments as Map<String, dynamic>;
                   return MaterialPageRoute(
-                    builder: (context) =>
-                        MeetingMinutesEditorScreen(minutesId: minutesId),
+                    builder: (context) => MeetingMinutesEditorScreen(
+                      meetingId: args['meetingId'],
+                      existingMinutes: args['existingMinutes'],
+                    ),
                   );
                 case '/meeting-minutes-approval':
                   final minutesId = settings.arguments as String;

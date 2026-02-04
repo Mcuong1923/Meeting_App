@@ -13,7 +13,11 @@ enum MeetingType { personal, team, department, company }
 
 enum MeetingPriority { low, medium, high, urgent }
 
-enum MeetingLocationType { physical, virtual, hybrid }
+enum MeetingLocationType {
+  physical, // Trực tiếp
+  virtual, // Trực tuyến
+  hybrid, // Kết hợp
+}
 
 /// Phạm vi cuộc họp
 enum MeetingScope {
@@ -76,6 +80,27 @@ class MeetingParticipant {
           confirmedAt != null ? Timestamp.fromDate(confirmedAt!) : null,
     };
   }
+
+  /// Copy with updated fields (for migration)
+  MeetingParticipant copyWith({
+    String? userId,
+    String? userName,
+    String? userEmail,
+    String? role,
+    bool? isRequired,
+    bool? hasConfirmed,
+    DateTime? confirmedAt,
+  }) {
+    return MeetingParticipant(
+      userId: userId ?? this.userId,
+      userName: userName ?? this.userName,
+      userEmail: userEmail ?? this.userEmail,
+      role: role ?? this.role,
+      isRequired: isRequired ?? this.isRequired,
+      hasConfirmed: hasConfirmed ?? this.hasConfirmed,
+      confirmedAt: confirmedAt ?? this.confirmedAt,
+    );
+  }
 }
 
 class MeetingModel {
@@ -136,6 +161,8 @@ class MeetingModel {
   final String? targetDepartmentId;
   final String? targetTeamId;
   final String? approvedBy;
+  final String? rejectedBy;
+  final DateTime? rejectedAt;
   final String? rejectedReason;
 
   MeetingModel({
@@ -180,6 +207,8 @@ class MeetingModel {
     this.targetDepartmentId,
     this.targetTeamId,
     this.approvedBy,
+    this.rejectedBy,
+    this.rejectedAt,
     this.rejectedReason,
   });
 
@@ -259,6 +288,10 @@ class MeetingModel {
       targetDepartmentId: map['targetDepartmentId'],
       targetTeamId: map['targetTeamId'],
       approvedBy: map['approvedBy'],
+      rejectedBy: map['rejectedBy'],
+      rejectedAt: map['rejectedAt'] != null
+          ? (map['rejectedAt'] as Timestamp).toDate()
+          : null,
       rejectedReason: map['rejectedReason'],
     );
   }
@@ -281,6 +314,8 @@ class MeetingModel {
       'creatorId': creatorId,
       'creatorName': creatorName,
       'participants': participants.map((p) => p.toMap()).toList(),
+      'participantIds': participants.map((p) => p.userId).toList(),
+      'secretaryId': participants.where((p) => p.role == 'secretary').map((p) => p.userId).firstOrNull,
       'agenda': agenda,
       'attachments': attachments,
       'meetingNotes': meetingNotes,
@@ -308,6 +343,8 @@ class MeetingModel {
       'targetDepartmentId': targetDepartmentId,
       'targetTeamId': targetTeamId,
       'approvedBy': approvedBy,
+      'rejectedBy': rejectedBy,
+      'rejectedAt': rejectedAt != null ? Timestamp.fromDate(rejectedAt!) : null,
       'rejectedReason': rejectedReason,
     };
   }
@@ -354,6 +391,8 @@ class MeetingModel {
     String? targetDepartmentId,
     String? targetTeamId,
     String? approvedBy,
+    String? rejectedBy,
+    DateTime? rejectedAt,
     String? rejectedReason,
   }) {
     return MeetingModel(
@@ -399,6 +438,8 @@ class MeetingModel {
       targetDepartmentId: targetDepartmentId ?? this.targetDepartmentId,
       targetTeamId: targetTeamId ?? this.targetTeamId,
       approvedBy: approvedBy ?? this.approvedBy,
+      rejectedBy: rejectedBy ?? this.rejectedBy,
+      rejectedAt: rejectedAt ?? this.rejectedAt,
       rejectedReason: rejectedReason ?? this.rejectedReason,
     );
   }
@@ -431,3 +472,109 @@ class MeetingModel {
   double get confirmationRate =>
       participantCount > 0 ? confirmedCount / participantCount : 0.0;
 }
+
+// Task Model for task management
+class TaskModel {
+  final String id;
+  final String title;
+  final String description;
+  final String assigneeId;
+  final String assigneeName;
+  final String assigneeRole;
+  final String priority; // 'low', 'medium', 'high'
+  final String status; // 'pending', 'in_progress', 'completed'
+  final double progress; // 0-100
+  final DateTime deadline;
+  final DateTime createdAt;
+  final String? fromDecisionId;
+  final String meetingId;
+
+  TaskModel({
+    required this.id,
+    required this.title,
+    required this.description,
+    required this.assigneeId,
+    required this.assigneeName,
+    required this.assigneeRole,
+    required this.priority,
+    required this.status,
+    required this.progress,
+    required this.deadline,
+    required this.createdAt,
+    this.fromDecisionId,
+    required this.meetingId,
+  });
+
+  factory TaskModel.fromMap(Map<String, dynamic> map) {
+    return TaskModel(
+      id: map['id'] ?? '',
+      title: map['title'] ?? '',
+      description: map['description'] ?? '',
+      assigneeId: map['assigneeId'] ?? '',
+      assigneeName: map['assigneeName'] ?? '',
+      assigneeRole: map['assigneeRole'] ?? '',
+      priority: map['priority'] ?? 'medium',
+      status: map['status'] ?? 'pending',
+      progress: (map['progress'] ?? 0.0).toDouble(),
+      deadline: map['deadline'] != null
+          ? (map['deadline'] as Timestamp).toDate()
+          : DateTime.now(),
+      createdAt: map['createdAt'] != null
+          ? (map['createdAt'] as Timestamp).toDate()
+          : DateTime.now(),
+      fromDecisionId: map['fromDecisionId'],
+      meetingId: map['meetingId'] ?? '',
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'title': title,
+      'description': description,
+      'assigneeId': assigneeId,
+      'assigneeName': assigneeName,
+      'assigneeRole': assigneeRole,
+      'priority': priority,
+      'status': status,
+      'progress': progress,
+      'deadline': Timestamp.fromDate(deadline),
+      'createdAt': Timestamp.fromDate(createdAt),
+      'fromDecisionId': fromDecisionId,
+      'meetingId': meetingId,
+    };
+  }
+
+  TaskModel copyWith({
+    String? id,
+    String? title,
+    String? description,
+    String? assigneeId,
+    String? assigneeName,
+    String? assigneeRole,
+    String? priority,
+    String? status,
+    double? progress,
+    DateTime? deadline,
+    DateTime? createdAt,
+    String? fromDecisionId,
+    String? meetingId,
+  }) {
+    return TaskModel(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      description: description ?? this.description,
+      assigneeId: assigneeId ?? this.assigneeId,
+      assigneeName: assigneeName ?? this.assigneeName,
+      assigneeRole: assigneeRole ?? this.assigneeRole,
+      priority: priority ?? this.priority,
+      status: status ?? this.status,
+      progress: progress ?? this.progress,
+      deadline: deadline ?? this.deadline,
+      createdAt: createdAt ?? this.createdAt,
+      fromDecisionId: fromDecisionId ?? this.fromDecisionId,
+      meetingId: meetingId ?? this.meetingId,
+    );
+  }
+}
+

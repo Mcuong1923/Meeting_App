@@ -18,7 +18,7 @@ class _FileManagementScreenState extends State<FileManagementScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   String _searchQuery = '';
-  FileType _selectedFileType = FileType.other;
+  final FileType _selectedFileType = FileType.other;
   String _selectedCategory = 'all';
 
   final List<String> _categories = [

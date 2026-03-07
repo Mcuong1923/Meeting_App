@@ -7,6 +7,16 @@ enum MeetingStatus {
   rejected,
   cancelled,
   completed,
+  expired, // Pending meeting that exceeded TTL
+}
+
+/// Room booking status for UI display
+enum RoomBookingStatus {
+  available,      // Room is free for the time range
+  pendingReserved, // Room is reserved by a pending meeting (soft lock)
+  booked,         // Room is booked by an approved meeting
+  maintenance,    // Room is under maintenance
+  disabled,       // Room is disabled
 }
 
 enum MeetingType { personal, team, department, company }
@@ -35,14 +45,53 @@ enum MeetingApprovalStatus {
   auto_approved, // Tự động duyệt
 }
 
+/// Cấp độ phê duyệt (dựa trên thành phần tham gia)
+enum MeetingApprovalLevel {
+  team,
+  department,
+  company,
+}
+
+/// Trạng thái phản hồi lời mời tham gia cuộc họp
+enum ParticipantAttendanceStatus {
+  pending,   // Chờ phản hồi
+  accepted,  // Đã xác nhận
+  declined,  // Từ chối
+  tentative, // Có thể tham gia
+}
+
+extension ParticipantAttendanceStatusX on ParticipantAttendanceStatus {
+  String get value => toString().split('.').last;
+
+  String get label {
+    switch (this) {
+      case ParticipantAttendanceStatus.pending:   return 'Chờ phản hồi';
+      case ParticipantAttendanceStatus.accepted:  return 'Đã xác nhận';
+      case ParticipantAttendanceStatus.declined:  return 'Từ chối';
+      case ParticipantAttendanceStatus.tentative: return 'Có thể';
+    }
+  }
+
+  static ParticipantAttendanceStatus fromString(String? s) {
+    switch (s) {
+      case 'accepted':  return ParticipantAttendanceStatus.accepted;
+      case 'declined':  return ParticipantAttendanceStatus.declined;
+      case 'tentative': return ParticipantAttendanceStatus.tentative;
+      default:          return ParticipantAttendanceStatus.pending;
+    }
+  }
+}
+
 class MeetingParticipant {
   final String userId;
   final String userName;
   final String userEmail;
   final String role; // chair, secretary, presenter, participant
   final bool isRequired;
-  final bool hasConfirmed;
+  /// Attendance status — replaces hasConfirmed bool
+  final ParticipantAttendanceStatus attendanceStatus;
   final DateTime? confirmedAt;
+  final DateTime? respondedAt;
 
   MeetingParticipant({
     required this.userId,
@@ -50,20 +99,39 @@ class MeetingParticipant {
     required this.userEmail,
     required this.role,
     this.isRequired = true,
-    this.hasConfirmed = false,
+    this.attendanceStatus = ParticipantAttendanceStatus.pending,
     this.confirmedAt,
+    this.respondedAt,
   });
 
+  /// Backward-compat: hasConfirmed = attendanceStatus is accepted
+  bool get hasConfirmed => attendanceStatus == ParticipantAttendanceStatus.accepted;
+
   factory MeetingParticipant.fromMap(Map<String, dynamic> map) {
+    // Backward-compat: old docs may have hasConfirmed bool instead of attendanceStatus
+    ParticipantAttendanceStatus status;
+    if (map['attendanceStatus'] != null) {
+      status = ParticipantAttendanceStatusX.fromString(map['attendanceStatus'] as String?);
+    } else if (map['hasConfirmed'] == true) {
+      status = ParticipantAttendanceStatus.accepted;
+      print('[MEETING][FROM_MAP] Fallback hasConfirmed=true -> status=$status for userId=${map['userId']}');
+    } else {
+      status = ParticipantAttendanceStatus.pending;
+      print('[MEETING][FROM_MAP] Fallback hasConfirmed=${map['hasConfirmed']} -> status=$status for userId=${map['userId']}');
+    }
+
     return MeetingParticipant(
       userId: map['userId'] ?? '',
       userName: map['userName'] ?? '',
       userEmail: map['userEmail'] ?? '',
       role: map['role'] ?? 'participant',
       isRequired: map['isRequired'] ?? true,
-      hasConfirmed: map['hasConfirmed'] ?? false,
+      attendanceStatus: status,
       confirmedAt: map['confirmedAt'] != null
           ? (map['confirmedAt'] as Timestamp).toDate()
+          : null,
+      respondedAt: map['respondedAt'] != null
+          ? (map['respondedAt'] as Timestamp).toDate()
           : null,
     );
   }
@@ -75,21 +143,23 @@ class MeetingParticipant {
       'userEmail': userEmail,
       'role': role,
       'isRequired': isRequired,
-      'hasConfirmed': hasConfirmed,
-      'confirmedAt':
-          confirmedAt != null ? Timestamp.fromDate(confirmedAt!) : null,
+      'attendanceStatus': attendanceStatus.value,
+      'hasConfirmed': hasConfirmed, // keep for Firestore rules & backward compat
+      'confirmedAt': confirmedAt != null ? Timestamp.fromDate(confirmedAt!) : null,
+      'respondedAt': respondedAt != null ? Timestamp.fromDate(respondedAt!) : null,
     };
   }
 
-  /// Copy with updated fields (for migration)
+  /// Copy with updated fields
   MeetingParticipant copyWith({
     String? userId,
     String? userName,
     String? userEmail,
     String? role,
     bool? isRequired,
-    bool? hasConfirmed,
+    ParticipantAttendanceStatus? attendanceStatus,
     DateTime? confirmedAt,
+    DateTime? respondedAt,
   }) {
     return MeetingParticipant(
       userId: userId ?? this.userId,
@@ -97,11 +167,13 @@ class MeetingParticipant {
       userEmail: userEmail ?? this.userEmail,
       role: role ?? this.role,
       isRequired: isRequired ?? this.isRequired,
-      hasConfirmed: hasConfirmed ?? this.hasConfirmed,
+      attendanceStatus: attendanceStatus ?? this.attendanceStatus,
       confirmedAt: confirmedAt ?? this.confirmedAt,
+      respondedAt: respondedAt ?? this.respondedAt,
     );
   }
 }
+
 
 class MeetingModel {
   final String id;
@@ -118,7 +190,9 @@ class MeetingModel {
   final int durationMinutes;
 
   // Địa điểm
-  final String? physicalLocation;
+  final String? roomId; // ID phòng họp từ Firestore (required for physical meetings)
+  final String? roomName; // Snapshot tên phòng để hiển thị nhanh
+  final String? physicalLocation; // Legacy field, giữ cho backward compatibility
   final String? virtualMeetingLink;
   final String? virtualMeetingPassword;
 
@@ -142,8 +216,10 @@ class MeetingModel {
   // Metadata
   final DateTime createdAt;
   final DateTime updatedAt;
+  final DateTime? expiresAt; // TTL for pending meetings - auto-expire if not approved
   final String? departmentId;
   final String? departmentName;
+  final String? teamId;
   final List<String> tags;
   final bool isRecurring;
   final String? recurringPattern; // daily, weekly, monthly
@@ -155,9 +231,10 @@ class MeetingModel {
   final bool recordMeeting;
   final bool requirePassword;
 
-  // Meeting scope and approval
   final MeetingScope scope;
   final MeetingApprovalStatus approvalStatus;
+  final MeetingApprovalLevel approvalLevel;
+  final String? approvalReason;
   final String? targetDepartmentId;
   final String? targetTeamId;
   final String? approvedBy;
@@ -176,6 +253,8 @@ class MeetingModel {
     required this.startTime,
     required this.endTime,
     required this.durationMinutes,
+    this.roomId,
+    this.roomName,
     this.physicalLocation,
     this.virtualMeetingLink,
     this.virtualMeetingPassword,
@@ -192,8 +271,10 @@ class MeetingModel {
     this.approvalNotes,
     required this.createdAt,
     required this.updatedAt,
+    this.expiresAt,
     this.departmentId,
     this.departmentName,
+    this.teamId,
     this.tags = const [],
     this.isRecurring = false,
     this.recurringPattern,
@@ -204,6 +285,8 @@ class MeetingModel {
     this.requirePassword = false,
     required this.scope,
     required this.approvalStatus,
+    this.approvalLevel = MeetingApprovalLevel.team,
+    this.approvalReason,
     this.targetDepartmentId,
     this.targetTeamId,
     this.approvedBy,
@@ -241,6 +324,8 @@ class MeetingModel {
       startTime: (map['startTime'] as Timestamp).toDate(),
       endTime: (map['endTime'] as Timestamp).toDate(),
       durationMinutes: map['durationMinutes'] ?? 60,
+      roomId: map['roomId'],
+      roomName: map['roomName'],
       physicalLocation: map['physicalLocation'],
       virtualMeetingLink: map['virtualMeetingLink'],
       virtualMeetingPassword: map['virtualMeetingPassword'],
@@ -262,8 +347,12 @@ class MeetingModel {
       approvalNotes: map['approvalNotes'],
       createdAt: (map['createdAt'] as Timestamp).toDate(),
       updatedAt: (map['updatedAt'] as Timestamp).toDate(),
+      expiresAt: map['expiresAt'] != null
+          ? (map['expiresAt'] as Timestamp).toDate()
+          : null,
       departmentId: map['departmentId'],
       departmentName: map['departmentName'],
+      teamId: map['teamId'],
       tags: List<String>.from(map['tags'] ?? []),
       isRecurring: map['isRecurring'] ?? false,
       recurringPattern: map['recurringPattern'],
@@ -285,6 +374,13 @@ class MeetingModel {
             'MeetingApprovalStatus.${map['approvalStatus'] ?? 'pending'}',
         orElse: () => MeetingApprovalStatus.pending,
       ),
+      approvalLevel: MeetingApprovalLevel.values.firstWhere(
+        (level) =>
+            level.toString() ==
+            'MeetingApprovalLevel.${map['approvalLevel'] ?? 'team'}',
+        orElse: () => MeetingApprovalLevel.team,
+      ),
+      approvalReason: map['approvalReason'],
       targetDepartmentId: map['targetDepartmentId'],
       targetTeamId: map['targetTeamId'],
       approvedBy: map['approvedBy'],
@@ -307,8 +403,9 @@ class MeetingModel {
       'startTime': Timestamp.fromDate(startTime),
       'endTime': Timestamp.fromDate(endTime),
       'durationMinutes': durationMinutes,
+      'roomId': roomId,
+      'roomName': roomName,
       'physicalLocation': physicalLocation,
-      'virtualMeetingLink': virtualMeetingLink,
       'virtualMeetingLink': virtualMeetingLink,
       'virtualMeetingPassword': virtualMeetingPassword,
       'creatorId': creatorId,
@@ -326,8 +423,10 @@ class MeetingModel {
       'approvalNotes': approvalNotes,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
+      'expiresAt': expiresAt != null ? Timestamp.fromDate(expiresAt!) : null,
       'departmentId': departmentId,
       'departmentName': departmentName,
+      'teamId': teamId,
       'tags': tags,
       'isRecurring': isRecurring,
       'recurringPattern': recurringPattern,
@@ -340,6 +439,8 @@ class MeetingModel {
       'requirePassword': requirePassword,
       'scope': scope.toString().split('.').last,
       'approvalStatus': approvalStatus.toString().split('.').last,
+      'approvalLevel': approvalLevel.toString().split('.').last,
+      'approvalReason': approvalReason,
       'targetDepartmentId': targetDepartmentId,
       'targetTeamId': targetTeamId,
       'approvedBy': approvedBy,
@@ -360,6 +461,8 @@ class MeetingModel {
     DateTime? startTime,
     DateTime? endTime,
     int? durationMinutes,
+    String? roomId,
+    String? roomName,
     String? physicalLocation,
     String? virtualMeetingLink,
     String? virtualMeetingPassword,
@@ -376,8 +479,10 @@ class MeetingModel {
     String? approvalNotes,
     DateTime? createdAt,
     DateTime? updatedAt,
+    DateTime? expiresAt,
     String? departmentId,
     String? departmentName,
+    String? teamId,
     List<String>? tags,
     bool? isRecurring,
     String? recurringPattern,
@@ -388,6 +493,8 @@ class MeetingModel {
     bool? requirePassword,
     MeetingScope? scope,
     MeetingApprovalStatus? approvalStatus,
+    MeetingApprovalLevel? approvalLevel,
+    String? approvalReason,
     String? targetDepartmentId,
     String? targetTeamId,
     String? approvedBy,
@@ -406,6 +513,8 @@ class MeetingModel {
       startTime: startTime ?? this.startTime,
       endTime: endTime ?? this.endTime,
       durationMinutes: durationMinutes ?? this.durationMinutes,
+      roomId: roomId ?? this.roomId,
+      roomName: roomName ?? this.roomName,
       physicalLocation: physicalLocation ?? this.physicalLocation,
       virtualMeetingLink: virtualMeetingLink ?? this.virtualMeetingLink,
       virtualMeetingPassword:
@@ -423,8 +532,10 @@ class MeetingModel {
       approvalNotes: approvalNotes ?? this.approvalNotes,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      expiresAt: expiresAt ?? this.expiresAt,
       departmentId: departmentId ?? this.departmentId,
       departmentName: departmentName ?? this.departmentName,
+      teamId: teamId ?? this.teamId,
       tags: tags ?? this.tags,
       isRecurring: isRecurring ?? this.isRecurring,
       recurringPattern: recurringPattern ?? this.recurringPattern,
@@ -435,6 +546,8 @@ class MeetingModel {
       requirePassword: requirePassword ?? this.requirePassword,
       scope: scope ?? this.scope,
       approvalStatus: approvalStatus ?? this.approvalStatus,
+      approvalLevel: approvalLevel ?? this.approvalLevel,
+      approvalReason: approvalReason ?? this.approvalReason,
       targetDepartmentId: targetDepartmentId ?? this.targetDepartmentId,
       targetTeamId: targetTeamId ?? this.targetTeamId,
       approvedBy: approvedBy ?? this.approvedBy,
@@ -448,6 +561,21 @@ class MeetingModel {
   bool get isPending => status == MeetingStatus.pending;
   bool get isApproved => status == MeetingStatus.approved;
   bool get isRejected => status == MeetingStatus.rejected;
+  bool get isExpired => status == MeetingStatus.expired;
+  
+  /// Check if a pending meeting has exceeded its TTL
+  bool get isPendingExpired {
+    if (status != MeetingStatus.pending) return false;
+    if (expiresAt == null) return false;
+    return DateTime.now().isAfter(expiresAt!);
+  }
+  
+  /// Check if this meeting actively blocks a room (approved OR pending not expired)
+  bool get blocksRoom {
+    if (status == MeetingStatus.approved) return true;
+    if (status == MeetingStatus.pending && !isPendingExpired) return true;
+    return false;
+  }
   bool get isCancelled => status == MeetingStatus.cancelled;
   bool get isCompleted => status == MeetingStatus.completed;
 
@@ -461,7 +589,7 @@ class MeetingModel {
   bool get needsApproval => isPending;
   bool get canJoin =>
       isApproved &&
-      DateTime.now().isAfter(startTime.subtract(Duration(minutes: 15)));
+      DateTime.now().isAfter(startTime.subtract(const Duration(minutes: 15)));
   bool get isOngoing =>
       DateTime.now().isAfter(startTime) && DateTime.now().isBefore(endTime);
   bool get isUpcoming => DateTime.now().isBefore(startTime);

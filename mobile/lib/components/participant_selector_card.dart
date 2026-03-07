@@ -78,7 +78,7 @@ class ParticipantSelectorCard extends StatelessWidget {
                         color: Colors.purple.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Icon(
+                      child: const Icon(
                         Icons.people,
                         color: Colors.purple,
                         size: 24,
@@ -108,7 +108,7 @@ class ParticipantSelectorCard extends StatelessWidget {
                       ),
                     ),
                     if (isLoading)
-                      SizedBox(
+                      const SizedBox(
                         width: 16,
                         height: 16,
                         child: CircularProgressIndicator(
@@ -140,7 +140,7 @@ class ParticipantSelectorCard extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
+                          const Icon(
                             Icons.person_outline,
                             size: 16,
                             color: Colors.purple,
@@ -188,7 +188,7 @@ class ParticipantSelectorCard extends StatelessWidget {
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.error_outline,
                         size: 16,
                         color: Colors.red,
@@ -379,15 +379,18 @@ class ParticipantSelectorCard extends StatelessWidget {
                 ),
               ),
 
-              // Participant selection widget
+              // Participant selection widget (scrollable)
               Expanded(
-                child: ParticipantSelectionWidget(
-                  availableParticipants: availableParticipants,
-                  selectedParticipants: selectedParticipants,
-                  onSelectionChanged: (participants) {
-                    onParticipantsChanged(participants);
-                  },
-                  showRoleFilter: true,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: ParticipantSelectionWidget(
+                    availableParticipants: availableParticipants,
+                    selectedParticipants: selectedParticipants,
+                    onSelectionChanged: (participants) {
+                      onParticipantsChanged(participants);
+                    },
+                    showRoleFilter: false,
+                  ),
                 ),
               ),
 

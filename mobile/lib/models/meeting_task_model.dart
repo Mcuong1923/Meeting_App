@@ -66,6 +66,14 @@ class MeetingTask {
   });
 
   factory MeetingTask.fromMap(Map<String, dynamic> map, String id) {
+    // Helper: safely parse Timestamp (may be null when serverTimestamp not yet resolved)
+    DateTime parseTimestamp(dynamic value, DateTime fallback) {
+      if (value == null) return fallback;
+      if (value is Timestamp) return value.toDate();
+      return fallback;
+    }
+
+    final now = DateTime.now();
     return MeetingTask(
       id: id,
       meetingId: map['meetingId'] ?? '',
@@ -75,7 +83,7 @@ class MeetingTask {
       assigneeName: map['assigneeName'] ?? '',
       assigneeAvatar: map['assigneeAvatar'],
       assigneeRole: map['assigneeRole'] ?? '',
-      deadline: (map['deadline'] as Timestamp).toDate(),
+      deadline: parseTimestamp(map['deadline'], now.add(const Duration(days: 7))),
       status: map['status'] ?? MeetingTaskStatus.pending,
       priority: map['priority'] ?? 'medium',
       progress: map['progress'] ?? 0,
@@ -93,10 +101,10 @@ class MeetingTask {
           [],
       createdBy: map['createdBy'] ?? '',
       createdByName: map['createdByName'] ?? '',
-      createdAt: (map['createdAt'] as Timestamp).toDate(),
-      updatedAt: (map['updatedAt'] as Timestamp).toDate(),
+      createdAt: parseTimestamp(map['createdAt'], now),
+      updatedAt: parseTimestamp(map['updatedAt'], now),
       completedAt: map['completedAt'] != null
-          ? (map['completedAt'] as Timestamp).toDate()
+          ? parseTimestamp(map['completedAt'], now)
           : null,
     );
   }

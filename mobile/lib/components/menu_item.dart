@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:iconly/iconly.dart';
 
 class MenuItem extends StatelessWidget {
   final String title;

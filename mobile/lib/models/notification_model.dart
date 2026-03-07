@@ -19,6 +19,9 @@ enum NotificationType {
   roomMaintenance, // Bảo trì phòng
   roleChange, // Thay đổi vai trò
   general, // Thông báo chung
+  bookingReminder, // Nhắc nhở đặt phòng nhanh
+  bookingExpired, // Đặt phòng đã hết hạn
+  bookingApprovalRequired, // Đặt phòng cần admin duyệt
 }
 
 /// Mức độ ưu tiên thông báo
@@ -51,6 +54,13 @@ class NotificationModel {
   final String? meetingTitle;
   final MeetingScope? meetingScope;
   final String? targetAudience; // 'company', 'department:tech', 'team:dev_team'
+  
+  // Các field bắt buộc để đồng bộ với Firestore Rules mới
+  final String? createdBy;
+  final String? scope; // 'team', 'department', 'company', 'personal'
+  final String? teamId;
+  final String? departmentId;
+  final List<String> recipients;
 
   NotificationModel({
     required this.id,
@@ -73,6 +83,11 @@ class NotificationModel {
     this.meetingTitle,
     this.meetingScope,
     this.targetAudience,
+    this.createdBy,
+    this.scope,
+    this.teamId,
+    this.departmentId,
+    this.recipients = const [],
   });
 
   factory NotificationModel.fromMap(Map<String, dynamic> map, String id) {
@@ -116,6 +131,11 @@ class NotificationModel {
             )
           : null,
       targetAudience: map['targetAudience'],
+      createdBy: map['createdBy'],
+      scope: map['scope'],
+      teamId: map['teamId'],
+      departmentId: map['departmentId'],
+      recipients: map['recipients'] != null ? List<String>.from(map['recipients']) : [],
     );
   }
 
@@ -142,6 +162,11 @@ class NotificationModel {
       'meetingTitle': meetingTitle,
       'meetingScope': meetingScope?.toString().split('.').last,
       'targetAudience': targetAudience,
+      'createdBy': createdBy,
+      'scope': scope,
+      'teamId': teamId,
+      'departmentId': departmentId,
+      'recipients': recipients,
     };
   }
 
@@ -166,6 +191,11 @@ class NotificationModel {
     String? meetingTitle,
     MeetingScope? meetingScope,
     String? targetAudience,
+    String? createdBy,
+    String? scope,
+    String? teamId,
+    String? departmentId,
+    List<String>? recipients,
   }) {
     return NotificationModel(
       id: id ?? this.id,
@@ -188,6 +218,11 @@ class NotificationModel {
       meetingTitle: meetingTitle ?? this.meetingTitle,
       meetingScope: meetingScope ?? this.meetingScope,
       targetAudience: targetAudience ?? this.targetAudience,
+      createdBy: createdBy ?? this.createdBy,
+      scope: scope ?? this.scope,
+      teamId: teamId ?? this.teamId,
+      departmentId: departmentId ?? this.departmentId,
+      recipients: recipients ?? this.recipients,
     );
   }
 
@@ -257,6 +292,8 @@ class NotificationTemplate {
       priority: NotificationPriority.high,
       meetingId: meetingId,
       createdAt: DateTime.now(),
+      createdBy: creatorName, // Placeholder for actual ID, handle appropriately in Provider.
+      recipients: [userId],
     );
   }
 
@@ -277,6 +314,7 @@ class NotificationTemplate {
       meetingId: meetingId,
       createdAt: DateTime.now(),
       scheduledAt: meetingTime.subtract(Duration(minutes: minutesBefore)),
+      recipients: [userId],
     );
   }
 
@@ -299,6 +337,7 @@ class NotificationTemplate {
       priority: NotificationPriority.high,
       meetingId: meetingId,
       createdAt: DateTime.now(),
+      recipients: [userId],
     );
   }
 
@@ -318,6 +357,7 @@ class NotificationTemplate {
       priority: NotificationPriority.normal,
       roomId: roomId,
       createdAt: DateTime.now(),
+      recipients: [userId],
     );
   }
 
@@ -338,6 +378,7 @@ class NotificationTemplate {
       createdAt: DateTime.now(),
       meetingId: meetingId,
       meetingTitle: meetingTitle,
+      recipients: [userId],
     );
   }
 
@@ -358,6 +399,7 @@ class NotificationTemplate {
       createdAt: DateTime.now(),
       meetingId: meetingId,
       meetingTitle: meetingTitle,
+      recipients: [userId],
     );
   }
 
@@ -379,6 +421,7 @@ class NotificationTemplate {
       createdAt: DateTime.now(),
       meetingId: meetingId,
       meetingTitle: meetingTitle,
+      recipients: [userId],
     );
   }
 
@@ -403,7 +446,112 @@ class NotificationTemplate {
       createdAt: DateTime.now(),
       meetingId: meetingId,
       meetingTitle: meetingTitle,
+      recipients: [userId],
+    );
+  }
+
+  /// Nhắc nhở đặt phòng nhanh - 15 phút trước giờ bắt đầu
+  static NotificationModel bookingReminder({
+    required String userId,
+    required String bookingId,
+    required String bookingTitle,
+    required String roomName,
+    required DateTime startTime,
+    required DateTime endTime,
+  }) {
+    final formattedTime = '${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}';
+    final formattedEndTime = '${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}';
+    
+    return NotificationModel(
+      id: '',
+      userId: userId,
+      title: '⏰ Đặt phòng sắp bắt đầu!',
+      message: 'Phòng $roomName ($formattedTime - $formattedEndTime) sẽ bắt đầu sau 15 phút. Vui lòng tạo cuộc họp ngay để xác nhận.',
+      type: NotificationType.bookingReminder,
+      priority: NotificationPriority.urgent,
+      isRead: false,
+      createdAt: DateTime.now(),
+      roomId: bookingId, // Using roomId field to store bookingId
+      actionData: {
+        'bookingId': bookingId,
+        'roomName': roomName,
+        'startTime': startTime.toIso8601String(),
+        'endTime': endTime.toIso8601String(),
+        'action': 'create_meeting',
+      },
+      recipients: [userId],
+    );
+  }
+
+  /// Thông báo đặt phòng đã hết hạn (auto-released)
+  static NotificationModel bookingExpired({
+    required String userId,
+    required String bookingTitle,
+    required String roomName,
+    required DateTime startTime,
+  }) {
+    final formattedTime = '${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}';
+    
+    return NotificationModel(
+      id: '',
+      userId: userId,
+      title: '⚠️ Đặt phòng đã bị hủy',
+      message: 'Đặt phòng "$bookingTitle" tại $roomName ($formattedTime) đã bị hủy do không tạo cuộc họp kịp thời. Đây là 1 lần vi phạm.',
+      type: NotificationType.bookingExpired,
+      priority: NotificationPriority.high,
+      isRead: false,
+      createdAt: DateTime.now(),
+      recipients: [userId],
+    );
+  }
+
+  /// Thông báo đặt phòng cần admin duyệt (restricted user)
+  static NotificationModel bookingNeedsAdminApproval({
+    required String userId,
+    required String bookingTitle,
+    required String roomName,
+    required DateTime startTime,
+  }) {
+    final formattedTime = '${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}';
+    
+    return NotificationModel(
+      id: '',
+      userId: userId,
+      title: '🔒 Đặt phòng chờ duyệt',
+      message: 'Đặt phòng "$bookingTitle" tại $roomName ($formattedTime) đang chờ admin duyệt do bạn đang bị hạn chế.',
+      type: NotificationType.bookingApprovalRequired,
+      priority: NotificationPriority.normal,
+      isRead: false,
+      createdAt: DateTime.now(),
+      recipients: [userId],
+    );
+  }
+
+  /// Thông báo cho Admin về booking cần duyệt
+  static NotificationModel adminBookingApprovalRequest({
+    required String adminId,
+    required String bookingTitle,
+    required String roomName,
+    required String userName,
+    required String bookingId,
+    required DateTime startTime,
+  }) {
+    final formattedTime = '${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}';
+    
+    return NotificationModel(
+      id: '',
+      userId: adminId,
+      title: '📋 Yêu cầu duyệt đặt phòng',
+      message: '$userName (đang bị hạn chế) yêu cầu đặt phòng "$bookingTitle" tại $roomName lúc $formattedTime.',
+      type: NotificationType.bookingApprovalRequired,
+      priority: NotificationPriority.high,
+      isRead: false,
+      createdAt: DateTime.now(),
+      actionData: {
+        'bookingId': bookingId,
+        'action': 'approve_booking',
+      },
+      recipients: [adminId],
     );
   }
 }
-

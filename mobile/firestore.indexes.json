@@ -16,7 +16,7 @@
     },
     {
       "collectionGroup": "meetings",
-      "queryScope": "COLLECTION", 
+      "queryScope": "COLLECTION",
       "fields": [
         {
           "fieldPath": "creatorId",
@@ -55,7 +55,21 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "decisions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "meetingId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []
-} 
+}

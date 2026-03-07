@@ -7,6 +7,8 @@ import 'package:metting_app/models/user_model.dart';
 import 'package:metting_app/models/meeting_model.dart';
 import 'package:intl/intl.dart';
 import 'dart:convert';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:metting_app/utils/app_logger.dart';
 import '../main.dart'; // Import for navigatorKey
 
 class NotificationProvider extends ChangeNotifier {
@@ -100,25 +102,27 @@ class NotificationProvider extends ChangeNotifier {
     );
 
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      print('✅ FCM permission granted');
+      AppLogger.d('FCM permission granted', tag: 'FCM');
 
       // Get FCM token
       String? token = await _messaging.getToken();
-      print('📱 FCM Token: $token');
+      AppLogger.logToken('FCM', token);
 
-      // Listen to foreground messages
-      FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+      if (token != null) {
+        // Listen to foreground messages
+        FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
 
-      // Listen to background messages
-      FirebaseMessaging.onMessageOpenedApp.listen(_handleBackgroundMessage);
+        // Listen to background messages
+        FirebaseMessaging.onMessageOpenedApp.listen(_handleBackgroundMessage);
+      }
     } else {
-      print('❌ FCM permission denied');
+      AppLogger.d('FCM permission denied', tag: 'FCM');
     }
   }
 
   /// Xử lý thông báo khi app đang mở
   void _handleForegroundMessage(RemoteMessage message) {
-    print('📨 Foreground message: ${message.notification?.title}');
+    AppLogger.d('Foreground message: ${message.notification?.title}', tag: 'FCM');
     _showLocalNotification(message);
   }
 
@@ -213,6 +217,8 @@ class NotificationProvider extends ChangeNotifier {
     try {
       print(
           '🔄 NotificationProvider.loadNotifications called for user: $userId');
+      print(
+          '🔍 Firestore query: collection("notifications").where("recipients", arrayContains: $userId).orderBy("createdAt", descending: true).limit(50)');
       _setLoading(true);
       _setError('');
       _currentUserId = userId; // Set current user ID
@@ -222,7 +228,7 @@ class NotificationProvider extends ChangeNotifier {
 
       QuerySnapshot snapshot = await _firestore
           .collection('notifications')
-          .where('userId', isEqualTo: userId)
+          .where('recipients', arrayContains: userId)
           .orderBy('createdAt', descending: true)
           .limit(50)
           .get();
@@ -248,11 +254,41 @@ class NotificationProvider extends ChangeNotifier {
   /// Tạo thông báo mới
   Future<String?> createNotification(NotificationModel notification) async {
     try {
+      final currentUser = FirebaseAuth.instance.currentUser;
+      final uid = currentUser?.uid;
+      
+      String? departmentId;
+      String? teamId;
+      List<String> recipients = notification.recipients;
+
+      if (recipients.isEmpty && notification.userId.isNotEmpty) {
+        recipients = [notification.userId];
+      }
+
+      if (uid != null) {
+        final userDoc = await _firestore.collection('users').doc(uid).get();
+        if (userDoc.exists) {
+          final userData = userDoc.data() as Map<String, dynamic>;
+          departmentId = userData['departmentId'];
+          teamId = userData['teamId'];
+          if (teamId == null && userData['teams'] != null && (userData['teams'] as List).isNotEmpty) {
+             teamId = (userData['teams'] as List).first;
+          }
+        }
+      }
+
+      final enhancedNotification = notification.copyWith(
+        createdBy: notification.createdBy ?? uid,
+        departmentId: departmentId,
+        teamId: teamId,
+        recipients: recipients,
+      );
+
       DocumentReference docRef = await _firestore
           .collection('notifications')
-          .add(notification.toMap());
+          .add(enhancedNotification.toMap());
 
-      NotificationModel newNotification = notification.copyWith(id: docRef.id);
+      NotificationModel newNotification = enhancedNotification.copyWith(id: docRef.id);
       _notifications.insert(0, newNotification);
       _updateUnreadCount();
       notifyListeners();
@@ -458,9 +494,11 @@ class NotificationProvider extends ChangeNotifier {
 
   /// Listen to real-time notifications
   void listenToNotifications(String userId) {
+    print(
+        '🔔 listenToNotifications started for user $userId with query: collection("notifications").where("recipients", arrayContains: $userId).orderBy("createdAt", descending: true).limit(50)');
     _firestore
         .collection('notifications')
-        .where('userId', isEqualTo: userId)
+        .where('recipients', arrayContains: userId)
         .orderBy('createdAt', descending: true)
         .limit(50)
         .snapshots()
@@ -468,7 +506,7 @@ class NotificationProvider extends ChangeNotifier {
       (snapshot) {
         _notifications = snapshot.docs
             .map((doc) => NotificationModel.fromMap(
-                doc.data() as Map<String, dynamic>, doc.id))
+                doc.data(), doc.id))
             .toList();
         _updateUnreadCount();
         notifyListeners();
@@ -626,6 +664,24 @@ class NotificationProvider extends ChangeNotifier {
       print('🔄 Current user ID: $_currentUserId');
       print('🔄 Is current user: ${userId == _currentUserId}');
 
+      final currentUser = FirebaseAuth.instance.currentUser;
+      final uid = currentUser?.uid;
+      
+      String? departmentId;
+      String? teamId;
+
+      if (uid != null) {
+        final userDoc = await _firestore.collection('users').doc(uid).get();
+        if (userDoc.exists) {
+          final userData = userDoc.data() as Map<String, dynamic>;
+          departmentId = userData['departmentId'];
+          teamId = userData['teamId'];
+          if (teamId == null && userData['teams'] != null && (userData['teams'] as List).isNotEmpty) {
+            teamId = (userData['teams'] as List).first;
+          }
+        }
+      }
+
       NotificationModel notification = NotificationModel(
         id: '',
         userId: userId,
@@ -638,6 +694,11 @@ class NotificationProvider extends ChangeNotifier {
         meetingTitle: meetingTitle,
         meetingScope: meetingScope,
         targetAudience: targetAudience,
+        createdBy: uid,
+        departmentId: departmentId,
+        teamId: teamId,
+        scope: meetingScope?.toString().split('.').last ?? 'personal',
+        recipients: [userId],
       );
 
       print('🔄 Adding notification to Firestore...');
@@ -669,6 +730,165 @@ class NotificationProvider extends ChangeNotifier {
       print('✅ Created notification for user $userId: $title');
     } catch (e) {
       print('❌ Error creating notification for user $userId: $e');
+    }
+  }
+
+  // ============================================================
+  // BOOKING REMINDER METHODS
+  // ============================================================
+
+  /// Tạo thông báo nhắc nhở đặt phòng nhanh (15 phút trước)
+  Future<void> createBookingReminder({
+    required String userId,
+    required String bookingId,
+    required String bookingTitle,
+    required String roomName,
+    required DateTime startTime,
+    required DateTime endTime,
+  }) async {
+    try {
+      final notification = NotificationTemplate.bookingReminder(
+        userId: userId,
+        bookingId: bookingId,
+        bookingTitle: bookingTitle,
+        roomName: roomName,
+        startTime: startTime,
+        endTime: endTime,
+      );
+
+      await createNotification(notification);
+
+      // Also show local notification immediately
+      await _showBookingReminderLocal(
+        bookingId: bookingId,
+        title: notification.title,
+        body: notification.message,
+        startTime: startTime,
+        endTime: endTime,
+        roomName: roomName,
+      );
+
+      print('✅ Created booking reminder for booking $bookingId');
+    } catch (e) {
+      print('❌ Error creating booking reminder: $e');
+    }
+  }
+
+  /// Hiển thị local notification cho booking reminder
+  Future<void> _showBookingReminderLocal({
+    required String bookingId,
+    required String title,
+    required String body,
+    required DateTime startTime,
+    required DateTime endTime,
+    required String roomName,
+  }) async {
+    const androidDetails = AndroidNotificationDetails(
+      'booking_reminder_channel',
+      'Booking Reminders',
+      channelDescription: 'Reminders for quick room bookings',
+      importance: Importance.max,
+      priority: Priority.max,
+      showWhen: true,
+      enableVibration: true,
+      playSound: true,
+      actions: [
+        AndroidNotificationAction(
+          'create_meeting',
+          'Tạo cuộc họp',
+          showsUserInterface: true,
+        ),
+        AndroidNotificationAction(
+          'cancel_booking',
+          'Hủy đặt phòng',
+          showsUserInterface: true,
+        ),
+      ],
+    );
+
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+      interruptionLevel: InterruptionLevel.timeSensitive,
+    );
+
+    const details = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    final payloadMap = {
+      'type': 'bookingReminder',
+      'bookingId': bookingId,
+      'roomName': roomName,
+      'startTime': startTime.toIso8601String(),
+      'endTime': endTime.toIso8601String(),
+    };
+    final payloadString = jsonEncode(payloadMap);
+
+    await _localNotifications.show(
+      bookingId.hashCode,
+      title,
+      body,
+      details,
+      payload: payloadString,
+    );
+  }
+
+  /// Tạo thông báo đặt phòng hết hạn (auto-released)
+  Future<void> createBookingExpiredNotification({
+    required String userId,
+    required String bookingTitle,
+    required String roomName,
+    required DateTime startTime,
+  }) async {
+    try {
+      final notification = NotificationTemplate.bookingExpired(
+        userId: userId,
+        bookingTitle: bookingTitle,
+        roomName: roomName,
+        startTime: startTime,
+      );
+
+      await createNotification(notification);
+      print('✅ Created booking expired notification for user $userId');
+    } catch (e) {
+      print('❌ Error creating booking expired notification: $e');
+    }
+  }
+
+  /// Tạo thông báo cho Admin về booking cần duyệt
+  Future<void> notifyAdminsAboutRestrictedBooking({
+    required String bookingId,
+    required String bookingTitle,
+    required String roomName,
+    required String userName,
+    required DateTime startTime,
+  }) async {
+    try {
+      // Get all admins
+      final adminsSnapshot = await _firestore
+          .collection('users')
+          .where('role', isEqualTo: 'admin')
+          .get();
+
+      for (final doc in adminsSnapshot.docs) {
+        final notification = NotificationTemplate.adminBookingApprovalRequest(
+          adminId: doc.id,
+          bookingTitle: bookingTitle,
+          roomName: roomName,
+          userName: userName,
+          bookingId: bookingId,
+          startTime: startTime,
+        );
+
+        await createNotification(notification);
+      }
+
+      print('✅ Notified ${adminsSnapshot.docs.length} admins about restricted booking');
+    } catch (e) {
+      print('❌ Error notifying admins: $e');
     }
   }
 

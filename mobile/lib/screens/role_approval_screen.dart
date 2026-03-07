@@ -453,23 +453,23 @@ class _RoleApprovalScreenState extends State<RoleApprovalScreen>
             // Request Summary (compact, no heavy box)
             Row(
               children: [
-                Icon(_getRoleIcon(user.pendingRole!), size: 14, color: Colors.grey.shade500),
+                Icon(_getPendingRoleIcon(user), size: 14, color: Colors.grey.shade500),
                 const SizedBox(width: 6),
                 Text(
-                  _getRoleName(user.pendingRole!),
+                  _getPendingRoleLabel(user),
                   style: TextStyle(
                     fontSize: 13,
                     color: Colors.grey.shade700,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                if (user.pendingDepartment != null) ...[
+                if (user.requestedDepartmentId != null) ...[
                   Text(' • ', style: TextStyle(color: Colors.grey.shade400)),
                   Icon(Icons.business_outlined, size: 14, color: Colors.grey.shade500),
                   const SizedBox(width: 4),
-                  Expanded(
+                  Flexible(
                     child: Text(
-                      user.pendingDepartment!,
+                      user.requestedDepartmentId!,
                       style: TextStyle(
                         fontSize: 13,
                         color: Colors.grey.shade700,
@@ -481,6 +481,34 @@ class _RoleApprovalScreenState extends State<RoleApprovalScreen>
                 ],
               ],
             ),
+            if (user.requestedTeamId != null && user.requestedTeamId!.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Icon(Icons.group_outlined, size: 14, color: Colors.blue.shade400),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Team: ',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade500,
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      _getTeamDisplayName(user.requestedTeamId!),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.blue.shade700,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ],
 
             const SizedBox(height: 12),
 
@@ -573,6 +601,30 @@ class _RoleApprovalScreenState extends State<RoleApprovalScreen>
     }
   }
 
+  String _getPendingRoleLabel(UserModel user) {
+    return user.requestedRole != null
+        ? _getRoleName(user.requestedRole!)
+        : 'Vai trò không hợp lệ';
+  }
+
+  IconData _getPendingRoleIcon(UserModel user) {
+    return user.requestedRole != null
+        ? _getRoleIcon(user.requestedRole!)
+        : Icons.help_outline_rounded;
+  }
+
+  String _getTeamDisplayName(String teamId) {
+    if (teamId.endsWith('__general')) {
+      return 'Chung (Chưa phân team)';
+    }
+    // Try to extract team name from the ID (e.g., "Marketing__content" → "content")
+    final parts = teamId.split('__');
+    if (parts.length >= 2) {
+      return parts.sublist(1).join(' ');
+    }
+    return teamId;
+  }
+
   Future<void> _approveUser(UserModel user) async {
     try {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
@@ -582,7 +634,7 @@ class _RoleApprovalScreenState extends State<RoleApprovalScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-                'Đã phê duyệt vai trò ${_getRoleName(user.pendingRole!)} cho ${user.displayName}'),
+                'Đã phê duyệt vai trò ${_getPendingRoleLabel(user)} cho ${user.displayName}'),
             backgroundColor: Colors.green,
           ),
         );
@@ -610,7 +662,7 @@ class _RoleApprovalScreenState extends State<RoleApprovalScreen>
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Bạn có chắc chắn muốn từ chối yêu cầu vai trò ${_getRoleName(user.pendingRole!)} của ${user.displayName}?'),
+            Text('Bạn có chắc chắn muốn từ chối yêu cầu vai trò ${_getPendingRoleLabel(user)} của ${user.displayName}?'),
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(12),

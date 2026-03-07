@@ -21,12 +21,21 @@ class AuthProvider with ChangeNotifier {
   String? get userId => _user?.uid;
   String? get userEmail => _user?.email;
 
-  // Kiểm tra xem user có cần chọn vai trò không
+  // Kiểm tra xem user có cần chọn vai trò không (nội bộ, đang chờ duyệt)
   bool get needsRoleSelection =>
       _userModel != null &&
-      !_userModel!.isAdmin && // Admin không cần chọn vai trò
-      !_userModel!.isRoleApproved &&
-      _userModel!.pendingRole == null;
+      _userModel!.accountType == 'internal' &&
+      _userModel!.status == 'pending';
+
+  // Kiểm tra xem user bị vô hiệu hóa
+  bool get isDisabled =>
+      _userModel != null && _userModel!.status == 'disabled';
+
+  /// Detect internal email - ONLY company.com
+  bool isInternalEmail(String? email) {
+    if (email == null) return false;
+    return email.trim().toLowerCase().endsWith('@company.com');
+  }
 
   AuthProvider() {
     // Lắng nghe thay đổi trạng thái đăng nhập
@@ -41,19 +50,101 @@ class AuthProvider with ChangeNotifier {
     });
   }
 
-  // Load thông tin user từ Firestore
+  // Load thông tin user từ Firestore + SAFE lazy migration
   Future<void> _loadUserModel() async {
     try {
-      if (_user != null) {
-        DocumentSnapshot doc =
-            await _firestore.collection('users').doc(_user!.uid).get();
-        if (doc.exists) {
-          _userModel =
-              UserModel.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+      if (_user == null) return;
+
+      DocumentSnapshot doc =
+          await _firestore.collection('users').doc(_user!.uid).get();
+
+      if (!doc.exists) {
+        // Doc không tồn tại -> tạo mới
+        await _createUserProfileIfNotExists(_user!);
+        doc = await _firestore.collection('users').doc(_user!.uid).get();
+        if (!doc.exists) return;
+      }
+
+      final data = doc.data() as Map<String, dynamic>;
+
+      // === SAFE Migration ===
+      final updates = <String, dynamic>{};
+      final emailLower = (data['email']?.toString() ?? _user!.email ?? '').trim().toLowerCase();
+      final internal = isInternalEmail(emailLower);
+      final currentRole = data['role']?.toString();
+      final hasHighRole = currentRole != null &&
+          currentRole != 'guest' &&
+          ['admin', 'director', 'manager', 'employee'].contains(currentRole);
+
+      final missingAccountType = data['accountType'] == null;
+      final missingStatus = data['status'] == null;
+      final hasOldPendingRole = data['pendingRole'] != null;
+      final hasOldPendingDept = data['pendingDepartment'] != null;
+
+      final needsMigration =
+          missingAccountType || missingStatus || hasOldPendingRole || hasOldPendingDept;
+
+      if (!needsMigration) {
+        _userModel = UserModel.fromMap(data, doc.id);
+        return;
+      }
+
+      // --- D1: accountType missing ---
+      if (missingAccountType) {
+        if (internal) {
+          updates['accountType'] = 'internal';
+          if (currentRole == null || currentRole == 'guest') {
+            // Guest hoặc null -> migrate sang employee/pending
+            updates['role'] = 'employee';
+            updates['status'] = 'pending';
+            updates['isRoleApproved'] = false;
+          } else {
+            // Already has high role (admin/director/manager/employee) -> NEVER overwrite role
+            if (missingStatus) updates['status'] = 'active';
+          }
+        } else {
+          // External
+          updates['accountType'] = 'external';
+          // NEVER overwrite role if already set
+          if (currentRole == null) {
+            updates['role'] = 'guest';
+          }
+          if (missingStatus) updates['status'] = 'active';
         }
       }
+
+      // --- D2: status missing (but accountType already exists) ---
+      if (missingStatus && !updates.containsKey('status')) {
+        updates['status'] = 'active'; // Never lock out existing users
+      }
+
+      // --- D3: Migrate old schema fields ---
+      if (hasOldPendingRole) {
+        if (data['requestedRole'] == null) {
+          updates['requestedRole'] = data['pendingRole'];
+        }
+        updates['pendingRole'] = FieldValue.delete();
+      }
+
+      if (hasOldPendingDept) {
+        if (data['requestedDepartmentId'] == null) {
+          updates['requestedDepartmentId'] = data['pendingDepartment'];
+        }
+        updates['pendingDepartment'] = FieldValue.delete();
+      }
+
+      // Apply migration
+      if (updates.isNotEmpty) {
+        final logRole = updates.containsKey('role') ? updates['role'] : '(unchanged)';
+        print('[MIGRATE] uid=${_user!.uid} email=$emailLower oldRole=$currentRole -> accountType=${updates['accountType'] ?? '(unchanged)'} status=${updates['status'] ?? '(unchanged)'} role=$logRole');
+        await _firestore.collection('users').doc(_user!.uid).update(updates);
+        doc = await _firestore.collection('users').doc(_user!.uid).get();
+      }
+
+      _userModel =
+          UserModel.fromMap(doc.data() as Map<String, dynamic>, doc.id);
     } catch (e) {
-      print('Error loading user model: $e');
+      print('[AUTH] Error loading user model: $e');
     }
   }
 
@@ -126,23 +217,32 @@ class AuthProvider with ChangeNotifier {
         password: password,
       );
 
-      // Tạo hoặc cập nhật user profile
       if (userCredential.user != null) {
-        await _createUserProfileIfNotExists(userCredential.user!);
+        _user = userCredential.user;
 
-        // Cập nhật lastLoginAt
-        final userDocRef =
-            _firestore.collection('users').doc(userCredential.user!.uid);
-        await userDocRef.update({
+        // Tạo profile nếu chưa có + load userModel (1 lần duy nhất)
+        await _createUserProfileIfNotExists(_user!);
+        await _loadUserModel();
+
+        // ====== CHECK STATUS ======
+        if (_userModel != null && _userModel!.status == 'disabled') {
+          await _auth.signOut();
+          _user = null;
+          _userModel = null;
+          throw Exception(
+            'Tài khoản của bạn đã bị vô hiệu hóa. '
+            'Vui lòng liên hệ Admin để được hỗ trợ.',
+          );
+        }
+
+        // Cập nhật lastLoginAt — fire-and-forget (không await)
+        _firestore.collection('users').doc(_user!.uid).update({
           'lastLoginAt': FieldValue.serverTimestamp(),
         });
 
-        // Setup rooms nếu user là admin và chưa có phòng
-        await _setupRoomsIfNeeded();
+        // Setup rooms nếu admin (truyền userModel sẵn, không load lại)
+        await _setupRoomsIfNeeded(userModel: _userModel);
       }
-
-      _user = userCredential.user;
-      await _loadUserModel();
     } on FirebaseAuthException catch (e) {
       String errorMessage = 'Đã xảy ra lỗi';
 
@@ -162,12 +262,17 @@ class AuthProvider with ChangeNotifier {
         case 'too-many-requests':
           errorMessage = 'Quá nhiều lần thử đăng nhập. Vui lòng thử lại sau';
           break;
+        case 'invalid-credential':
+          errorMessage = 'Email hoặc mật khẩu không đúng';
+          break;
         default:
           errorMessage = e.message ?? 'Lỗi đăng nhập';
       }
 
       throw Exception(errorMessage);
     } catch (e) {
+      // Re-throw Exception của chúng ta (ví dụ: bị disabled) không bọc thêm
+      if (e is Exception) rethrow;
       throw Exception('Lỗi không xác định: $e');
     } finally {
       _isLoading = false;
@@ -205,22 +310,19 @@ class AuthProvider with ChangeNotifier {
 
       // Tạo hoặc cập nhật user profile
       if (userCredential.user != null) {
-        await _createUserProfileIfNotExists(userCredential.user!);
+        _user = userCredential.user;
+        await _createUserProfileIfNotExists(_user!);
+        await _loadUserModel();
 
-        // Cập nhật thông tin mới nhất
-        final userDoc =
-            _firestore.collection('users').doc(userCredential.user!.uid);
-        await userDoc.update({
+        // Cập nhật lastLoginAt + photoURL — fire-and-forget
+        _firestore.collection('users').doc(_user!.uid).update({
           'lastLoginAt': FieldValue.serverTimestamp(),
-          'photoURL': userCredential.user!.photoURL,
+          'photoURL': _user!.photoURL,
         });
 
-        // Setup rooms nếu user là admin và chưa có phòng
-        await _setupRoomsIfNeeded();
+        // Setup rooms nếu admin (truyền userModel sẵn)
+        await _setupRoomsIfNeeded(userModel: _userModel);
       }
-
-      _user = userCredential.user;
-      await _loadUserModel();
     } catch (e) {
       throw Exception('Lỗi đăng nhập với Google: $e');
     } finally {
@@ -229,36 +331,23 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  /// TẠO USER PROFILE THÔNG MINH - KHÔNG OVERRIDE ROLES ĐÃ SETUP
+  /// TẠO USER PROFILE MỚI (chỉ khi doc chưa tồn tại)
   Future<void> _createUserProfileIfNotExists(User user,
       {String? displayName}) async {
     try {
       final userDocRef = _firestore.collection('users').doc(user.uid);
       final docSnapshot = await userDocRef.get();
 
-      if (docSnapshot.exists) {
-        // User đã tồn tại -> KHÔNG thay đổi gì, giữ nguyên setup từ Firebase Console
-        print('✅ User profile đã tồn tại - giữ nguyên setup hiện tại');
-        return;
-      }
+      if (docSnapshot.exists) return; // KHÔNG overwrite bất kỳ gì
 
-      // User chưa tồn tại -> Tạo mới với role default
-      print('🆕 Tạo user profile mới với role mặc định');
+      final internal = isInternalEmail(user.email);
 
-      await userDocRef.set({
+      final profileData = <String, dynamic>{
         'email': user.email,
         'displayName': displayName ?? user.displayName ?? 'Người dùng',
         'photoURL': user.photoURL,
-        'role': 'guest', // Role mặc định
-        'isRoleApproved': false, // Cần được phê duyệt
-        'pendingRole': null,
-        'pendingDepartment': null,
-        'departmentId': null,
-        'departmentName': null,
-        'teamIds': [],
-        'teamNames': [],
-        'managerId': null,
-        'managerName': null,
+        'teamIds': <String>[],
+        'teamNames': <String>[],
         'isActive': true,
         'createdAt': FieldValue.serverTimestamp(),
         'lastLoginAt': FieldValue.serverTimestamp(),
@@ -268,40 +357,38 @@ class AuthProvider with ChangeNotifier {
               ? user.providerData.first.providerId
               : 'email',
         },
-      });
+        'accountType': internal ? 'internal' : 'external',
+        'role': internal ? 'employee' : 'guest',
+        'status': internal ? 'pending' : 'active',
+        'isRoleApproved': !internal,
+      };
 
-      print('✅ Đã tạo user profile với role guest');
+      await userDocRef.set(profileData);
+      print('[AUTH] Created new profile: ${user.email} (${internal ? "internal/employee/pending" : "external/guest/active"})');
     } catch (e) {
-      print('❌ Lỗi tạo user profile: $e');
-      // Không throw error để không làm gián đoạn quá trình đăng nhập
+      print('[AUTH] Error creating user profile: $e');
     }
   }
 
   /// Setup rooms nếu user là admin và chưa có phòng
-  Future<void> _setupRoomsIfNeeded() async {
+  /// [userModel] được truyền vào để tránh load lại từ Firestore
+  Future<void> _setupRoomsIfNeeded({UserModel? userModel}) async {
     try {
-      // Chờ một chút để userModel được load
-      await Future.delayed(const Duration(milliseconds: 500));
-      await _loadUserModel();
+      final model = userModel ?? _userModel;
+      if (model == null || !model.isAdmin) return;
 
-      if (_userModel != null && _userModel!.isAdmin) {
-        // Kiểm tra đã có phòng chưa
-        final QuerySnapshot roomSnapshot =
-            await _firestore.collection('rooms').limit(1).get();
+      // Kiểm tra đã có phòng chưa
+      final QuerySnapshot roomSnapshot =
+          await _firestore.collection('rooms').limit(1).get();
 
-        if (roomSnapshot.docs.isEmpty) {
-          print(
-              '🏗️ Admin đăng nhập lần đầu - thiết lập phòng họp mặc định...');
-
-          // Setup rooms cho admin
-          await RoomSetupHelper.setupDefaultRooms(_userModel!);
-
-          print('✅ Đã setup phòng họp mặc định cho admin');
-        }
+      if (roomSnapshot.docs.isEmpty) {
+        print('🏗️ Admin đăng nhập lần đầu - thiết lập phòng họp mặc định...');
+        await RoomSetupHelper.setupDefaultRooms(model);
+        print('✅ Đã setup phòng họp mặc định cho admin');
       }
     } catch (e) {
       print('⚠️ Lỗi setup rooms: $e');
-      // Không throw error để không làm gián đoạn đăng nhập
+      // Không throw để không làm gián đoạn đăng nhập
     }
   }
 
@@ -347,10 +434,17 @@ class AuthProvider with ChangeNotifier {
   }
 
   // Đăng xuất
+  // Callback để các provider khác cleanup (tránh circular dependency)
+  VoidCallback? onLogoutCallback;
+
   Future<void> logout() async {
     try {
       _isLoading = true;
       notifyListeners();
+
+      // Notify các provider khác trước khi sign out
+      // để họ kịp cancel Firestore streams (tránh permission-denied sau logout)
+      onLogoutCallback?.call();
 
       await _auth.signOut();
 
@@ -509,7 +603,7 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  // Lấy danh sách user chờ duyệt vai trò
+  // Lấy danh sách user chờ duyệt vai trò (Internal users with pending status or unapproved roles)
   Future<List<UserModel>> getPendingUsers() async {
     if (_userModel == null ||
         (!_userModel!.isAdmin && !_userModel!.isDirector)) {
@@ -518,25 +612,26 @@ class AuthProvider with ChangeNotifier {
 
     Query query = _firestore
         .collection('users')
-        .where('isRoleApproved', isEqualTo: false)
-        .where('pendingRole', isNotEqualTo: null);
+        .where('accountType', isEqualTo: 'internal')
+        .where('status', isEqualTo: 'pending');
+
+    QuerySnapshot snapshot = await query.get();
+    var users = snapshot.docs
+        .map((doc) =>
+            UserModel.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+        .where((user) => user.requestedDepartmentId != null) // Lọc client side do missing index hoặc composite query limit
+        .toList();
 
     // Nếu là Director, chỉ lấy users trong department mình
     if (_userModel!.isDirector && !_userModel!.isAdmin) {
       if (_userModel!.departmentId != null) {
-        query = query.where('pendingDepartment',
-            isEqualTo: _userModel!.departmentId);
+        users = users.where((u) => u.requestedDepartmentId == _userModel!.departmentId).toList();
       } else {
-        // Nếu Director chưa có department, trả về empty
         return [];
       }
     }
-
-    QuerySnapshot snapshot = await query.get();
-    return snapshot.docs
-        .map((doc) =>
-            UserModel.fromMap(doc.data() as Map<String, dynamic>, doc.id))
-        .toList();
+    
+    return users;
   }
 
   // Lấy tất cả users trong department (cho Director)
@@ -643,12 +738,7 @@ class AuthProvider with ChangeNotifier {
 
   // Admin và Director duyệt vai trò
   Future<void> approveUserRole(String userId) async {
-    // DEBUG: Kiểm tra user role hiện tại
-    print('🔍 DEBUG - Current user role: ${_userModel?.role}');
-    print('🔍 DEBUG - isAdmin: ${_userModel?.isAdmin}');
-    print('🔍 DEBUG - isDirector: ${_userModel?.isDirector}');
-    print('🔍 DEBUG - User ID: ${_userModel?.id}');
-    print('🔍 DEBUG - Approving user: $userId');
+    print('🔍 DEBUG - Approving user: $userId by ${_userModel?.role}');
 
     if (_userModel == null ||
         (!_userModel!.isAdmin && !_userModel!.isDirector)) {
@@ -658,20 +748,39 @@ class AuthProvider with ChangeNotifier {
     final docSnapshot = await userDoc.get();
     if (!docSnapshot.exists) throw Exception('User không tồn tại');
     final data = docSnapshot.data() as Map<String, dynamic>;
-    final pendingRole = data['pendingRole'];
-    final pendingDepartment = data['pendingDepartment'];
-    if (pendingRole == null) throw Exception('Không có vai trò chờ duyệt');
+    
+    // Fallback migration variables
+    final reqRole = data['requestedRole'] ?? data['pendingRole'];
+    final reqDept = data['requestedDepartmentId'] ?? data['pendingDepartment'];
+    final reqTeam = data['requestedTeamId'];
 
-    // Map departmentId thành departmentName
-    String? departmentName = _mapDepartmentIdToName(pendingDepartment);
+    if (reqRole == null || reqDept == null) throw Exception('Không có vai trò / phòng ban chờ duyệt. User status có thể bị lỗi.');
+
+    // Director cannot approve admin or director requests
+    if (_userModel!.isDirector && !_userModel!.isAdmin) {
+      if (reqRole == 'admin' || reqRole == 'director') {
+        throw Exception('Director không thể phê duyệt chức danh Admin hoặc Director');
+      }
+    }
+
+    String? departmentName = _mapDepartmentIdToName(reqDept);
 
     await userDoc.update({
-      'role': pendingRole,
-      'departmentId': pendingDepartment,
-      'departmentName': departmentName, // ← Thêm departmentName
-      'pendingRole': null,
-      'pendingDepartment': null,
+      'role': reqRole,
+      'departmentId': reqDept,
+      'departmentName': departmentName,
+      'teamId': reqTeam,
+      if (reqTeam != null) 'teamIds': FieldValue.arrayUnion([reqTeam]),
+      'status': 'active',
       'isRoleApproved': true,
+      
+      // Cleanup fields
+      'requestedRole': FieldValue.delete(),
+      'requestedDepartmentId': FieldValue.delete(),
+      'requestedTeamId': FieldValue.delete(),
+      'requestedRoleReason': FieldValue.delete(),
+      'pendingRole': FieldValue.delete(),
+      'pendingDepartment': FieldValue.delete(),
     });
   }
 
@@ -683,16 +792,22 @@ class AuthProvider with ChangeNotifier {
     }
     final userDoc = _firestore.collection('users').doc(userId);
     await userDoc.update({
-      'pendingRole': null,
-      'pendingDepartment': null,
-      'role': 'guest',
-      'isRoleApproved': true,
+      'status': 'disabled', // Cho disabled cấm không vào đc app nữa (nếu muốn pending lại thì dùng UI khác)
+      'isRoleApproved': false,
+      
+      // Cleanup fields
+      'requestedRole': FieldValue.delete(),
+      'requestedDepartmentId': FieldValue.delete(),
+      'requestedTeamId': FieldValue.delete(),
+      'requestedRoleReason': FieldValue.delete(),
+      'pendingRole': FieldValue.delete(),
+      'pendingDepartment': FieldValue.delete(),
     });
   }
 
-  /// Gửi yêu cầu vai trò và phòng ban (cho role selection screen)
+  /// Gửi yêu cầu vai trò và phòng ban (cho Request Access / Role selection)
   Future<void> submitRoleAndDepartment(
-      UserRole role, String? departmentId, {String? fullName}) async {
+      UserRole role, String? departmentId, {String? fullName, String? teamId, String? reason}) async {
     try {
       if (_user == null) throw Exception('Chưa đăng nhập');
       
@@ -701,10 +816,13 @@ class AuthProvider with ChangeNotifier {
         throw Exception('Vui lòng chọn phòng ban');
       }
 
-      final updateData = {
-        'pendingRole': role.toString().split('.').last,
-        'pendingDepartment': departmentId,
+      final updateData = <String, dynamic>{
+        'requestedRole': role.toString().split('.').last,
+        'requestedDepartmentId': departmentId,
+        'requestedTeamId': teamId,
+        'requestedRoleReason': reason,
         'isRoleApproved': false,
+        'status': 'pending', // Phục hồi status về pending nếu lỡ disable
         'updatedAt': FieldValue.serverTimestamp(),
       };
       
@@ -752,21 +870,23 @@ class AuthProvider with ChangeNotifier {
   }
 
   /// Create role/department change request (for regular users) - requires approval
-  Future<void> createRoleChangeRequest(UserRole newRole, String? newDepartment) async {
+  Future<void> createRoleChangeRequest(UserRole newRole, String? newDepartment, [String? teamId, String? reason]) async {
     try {
       if (_user == null) throw Exception('Chưa đăng nhập');
       if (_userModel == null) throw Exception('Không tìm thấy thông tin user');
 
-      // Check if user is admin (shouldn't use this method)
       if (_userModel!.isAdmin) {
-        throw Exception('Admin nên dùng updateRoleAndDepartment thay vì tạo request');
+        throw Exception('Admin nên dùng chức năng khác thay vì tạo request');
       }
 
       await _firestore.collection('users').doc(_user!.uid).update({
-        'pendingRole': newRole.toString().split('.').last,
-        'pendingDepartment': newDepartment,
+        'requestedRole': newRole.toString().split('.').last,
+        'requestedDepartmentId': newDepartment,
+        'requestedTeamId': teamId,
+        'requestedRoleReason': reason,
         'requestedAt': FieldValue.serverTimestamp(),
-        'isRoleApproved': false,
+        // KHÔNG BỊ status='pending' ĐỂ KHÔNG BỊ BLOCK RA NGOÀI (vì account đang active)
+        // 'isRoleApproved' retains current status (they are currently approved, just requesting new)
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
@@ -814,7 +934,7 @@ class AuthProvider with ChangeNotifier {
 
   /// Check if user has pending role/department change request
   bool hasPendingRoleChange() {
-    return _userModel?.pendingRole != null || _userModel?.pendingDepartment != null;
+    return _userModel?.requestedRole != null || _userModel?.requestedDepartmentId != null;
   }
 
   /// Check if current user is Global Admin

@@ -680,7 +680,7 @@ class MeetingBasicForm extends StatelessWidget {
 
       if (usersToShow.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text(
                 'Không có người dùng nào để chọn. Vui lòng kiểm tra dữ liệu.'),
             backgroundColor: Colors.red,
@@ -696,7 +696,7 @@ class MeetingBasicForm extends StatelessWidget {
             content: Text(
                 '✅ Sử dụng dữ liệu test cho phòng ban ${department.name} (${usersToShow.length} người)'),
             backgroundColor: Colors.blue,
-            duration: Duration(seconds: 3),
+            duration: const Duration(seconds: 3),
           ),
         );
       }
@@ -706,7 +706,7 @@ class MeetingBasicForm extends StatelessWidget {
         print(
             '⚠️ WARNING: Department filter failed, showing all available participants');
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text(
                 '⚠️ Hiển thị tất cả người dùng do không tìm thấy thành viên phòng ban'),
             backgroundColor: Colors.orange,
@@ -753,7 +753,7 @@ class MeetingBasicForm extends StatelessWidget {
               SnackBar(
                 content: Text('Đã chọn ${participants.length} người tham gia'),
                 backgroundColor: Colors.green,
-                duration: Duration(seconds: 2),
+                duration: const Duration(seconds: 2),
               ),
             );
           },
@@ -1071,7 +1071,7 @@ class MeetingBasicForm extends StatelessWidget {
                                 ),
                               );
                             },
-                            icon: Icon(Icons.visibility, size: 16),
+                            icon: const Icon(Icons.visibility, size: 16),
                             label: const Text('Xem chi tiết'),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: Colors.purple[700],
@@ -1105,7 +1105,7 @@ class MeetingBasicForm extends StatelessWidget {
                                 _showParticipantRoleDialog(context, department);
                               }
                             },
-                            icon: Icon(Icons.edit, size: 16),
+                            icon: const Icon(Icons.edit, size: 16),
                             label: const Text('Chỉnh sửa'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.purple,
@@ -1201,7 +1201,7 @@ class MeetingBasicForm extends StatelessWidget {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: Colors.blue, width: 2),
+          borderSide: const BorderSide(color: Colors.blue, width: 2),
         ),
         filled: true,
         fillColor: Colors.grey[50],
@@ -1234,7 +1234,7 @@ class MeetingBasicForm extends StatelessWidget {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: Colors.blue, width: 2),
+          borderSide: const BorderSide(color: Colors.blue, width: 2),
         ),
         filled: true,
         fillColor: Colors.grey[50],
@@ -1362,7 +1362,7 @@ class MeetingBasicForm extends StatelessWidget {
                 value: dept.id,
                 child: Row(
                   children: [
-                    Icon(Icons.business, size: 16, color: Colors.blue),
+                    const Icon(Icons.business, size: 16, color: Colors.blue),
                     const SizedBox(width: 8),
                     Expanded(child: Text(dept.name)),
                     Container(
@@ -1373,7 +1373,7 @@ class MeetingBasicForm extends StatelessWidget {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        '${dept.memberIds?.length ?? 0}',
+                        '${dept.memberIds.length ?? 0}',
                         style: TextStyle(fontSize: 11, color: Colors.blue[700]),
                       ),
                     ),
@@ -1428,8 +1428,8 @@ class EnhancedParticipantDialog extends StatefulWidget {
 }
 
 class _EnhancedParticipantDialogState extends State<EnhancedParticipantDialog> {
-  Map<String, bool> _selectedUsers = {};
-  Map<String, String> _userRoles = {}; // userId -> role
+  final Map<String, bool> _selectedUsers = {};
+  final Map<String, String> _userRoles = {}; // userId -> role
   bool _selectAll = false;
 
   @override
@@ -1565,7 +1565,7 @@ class _EnhancedParticipantDialogState extends State<EnhancedParticipantDialog> {
                   const SizedBox(height: 16),
 
                   // Select All Button
-                  Container(
+                  SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
                       onPressed: _toggleSelectAll,
@@ -1962,11 +1962,11 @@ class DepartmentParticipantSummary extends StatelessWidget {
                   color: Colors.orange,
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: Row(
+                child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(Icons.check_circle, color: Colors.white, size: 16),
-                    const SizedBox(width: 6),
+                    SizedBox(width: 6),
                     Text(
                       'Đã setup',
                       style: TextStyle(
@@ -2098,7 +2098,7 @@ class DepartmentParticipantSummary extends StatelessWidget {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: onViewDetails,
-                  icon: Icon(Icons.visibility, size: 18),
+                  icon: const Icon(Icons.visibility, size: 18),
                   label: const Text('Xem chi tiết'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.orange[700],
@@ -2114,7 +2114,7 @@ class DepartmentParticipantSummary extends StatelessWidget {
               Expanded(
                 child: ElevatedButton.icon(
                   onPressed: onEdit,
-                  icon: Icon(Icons.edit, size: 18),
+                  icon: const Icon(Icons.edit, size: 18),
                   label: const Text('Chỉnh sửa'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.orange,

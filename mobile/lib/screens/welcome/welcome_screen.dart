@@ -31,7 +31,7 @@ class WelcomeScreen extends StatelessWidget {
                   height: size.height * 0.45,
                 ),
                 SizedBox(height: size.height * 0.05),
-                Container(
+                SizedBox(
                   width: size.width * 0.8,
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(29),
@@ -41,7 +41,7 @@ class WelcomeScreen extends StatelessWidget {
                           context,
                           MaterialPageRoute(
                             builder: (context) {
-                              return LoginScreen();
+                              return const LoginScreen();
                             },
                           ),
                         );
@@ -59,7 +59,7 @@ class WelcomeScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 16),
-                Container(
+                SizedBox(
                   width: size.width * 0.8,
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(29),
@@ -69,7 +69,7 @@ class WelcomeScreen extends StatelessWidget {
                           context,
                           MaterialPageRoute(
                             builder: (context) {
-                              return SignUpScreen();
+                              return const SignUpScreen();
                             },
                           ),
                         );

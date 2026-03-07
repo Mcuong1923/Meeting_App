@@ -16,8 +16,8 @@ class AnalyticsProvider extends ChangeNotifier {
   UserAnalytics? _userAnalytics;
   FileAnalytics? _fileAnalytics;
   List<AnalyticsEvent> _recentEvents = [];
-  List<MetricCard> _dashboardMetrics = [];
-  List<ChartConfig> _dashboardCharts = [];
+  final List<MetricCard> _dashboardMetrics = [];
+  final List<ChartConfig> _dashboardCharts = [];
 
   bool _isLoading = false;
   String _error = '';
@@ -819,8 +819,4 @@ class AnalyticsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  @override
-  void dispose() {
-    super.dispose();
-  }
 }

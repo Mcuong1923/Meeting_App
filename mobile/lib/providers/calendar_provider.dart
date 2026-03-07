@@ -8,7 +8,7 @@ import 'package:metting_app/models/room_model.dart';
 class CalendarProvider extends ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  List<CalendarEvent> _events = [];
+  final List<CalendarEvent> _events = [];
   CalendarViewConfig _viewConfig = CalendarViewConfig(
     focusedDay: DateTime.now(),
     firstDay: DateTime.now().subtract(const Duration(days: 365)),
@@ -18,7 +18,7 @@ class CalendarProvider extends ChangeNotifier {
   bool _isLoading = false;
   String _error = '';
   DateTime _selectedDate = DateTime.now();
-  List<ScheduleConflict> _conflicts = [];
+  final List<ScheduleConflict> _conflicts = [];
 
   // Getters
   List<CalendarEvent> get events => _events;
@@ -432,8 +432,4 @@ class CalendarProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  @override
-  void dispose() {
-    super.dispose();
-  }
 }

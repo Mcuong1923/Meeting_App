@@ -1,6 +1,3 @@
-// PASTE RULES TỪ FIREBASE CONSOLE VÀO ĐÂY
-// Copy toàn bộ code từ Firebase Console editor và paste vào đây 
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -31,8 +28,25 @@ service cloud.firestore {
       return isAuthenticated() && getUserRole() == 'employee';
     }
     
+    function isGuest() {
+      return isAuthenticated() && getUserRole() == 'guest';
+    }
+    
+    function isPending() {
+      return isAuthenticated() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'pending';
+    }
+
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function sameDepartment(resourceData) {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.departmentId == resourceData.data.departmentId;
+    }
+    
+    function sameTeam(resourceData) {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.teamId == resourceData.data.teamId;
     }
 
     // Backward compatibility - Admin là quyền cao nhất
@@ -40,50 +54,305 @@ service cloud.firestore {
       return isAdmin();
     }
 
-    // Rules cho collection users
+    // Helper function: Kiểm tra user có phải là participant của meeting không
+    // User là participant nếu: uid == creatorId HOẶC uid nằm trong participantIds
+    function isMeetingParticipant(meetingId) {
+      return isAuthenticated() && (
+        get(/databases/$(database)/documents/meetings/$(meetingId)).data.creatorId == request.auth.uid ||
+        (get(/databases/$(database)/documents/meetings/$(meetingId)).data.participantIds != null &&
+         get(/databases/$(database)/documents/meetings/$(meetingId)).data.participantIds.hasAny([request.auth.uid]))
+      );
+    }
+
+    // ===== users =====
     match /users/{userId} {
-      // Đọc: User có thể đọc thông tin của chính mình, Admin có thể đọc tất cả
-      allow read: if isOwner(userId) || isAdmin() || isDirector();
-      
-      // List: Cho phép authenticated users list users để load departments/teams
-      allow list: if isAuthenticated();
-      
-      // Tạo: User có thể tạo thông tin của chính mình
+      // READ
+      allow read: if isOwner(userId) || isAdmin() || isDirector() || isManager();
+      allow list: if isAuthenticated() && (isAdmin() || isDirector() || isManager());
+
+      // CREATE: only self-registration
       allow create: if isOwner(userId) && isAuthenticated();
-      
-      // Cập nhật: User có thể cập nhật thông tin cá nhân, Admin và Director có thể thay đổi role
-      allow update: if isAuthenticated() && 
-        (
-          // Admin và Director có thể update bất kỳ user nào
-          (isAdmin() || isDirector()) ||
-          // User có thể update hồ sơ cá nhân + gửi yêu cầu role (pendingRole, pendingDepartment)
-          (isOwner(userId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'isRoleApproved', 'departmentId']))
-        );
-      
-      // Xóa: Admin có thể xóa bất kỳ user nào, Director có thể xóa user trong department mình
-      allow delete: if isAdmin() || 
-        (isDirector() && 
-         get(/databases/$(database)/documents/users/$(userId)).data.departmentId == 
+
+      // UPDATE
+      allow update: if isAuthenticated() && (
+        // 1. Owner: safe profile fields only (không thể tự thay đổi role/status hiện tại)
+        // Cho phép Owner cập nhật các trường requested* để xin cấp quyền
+        (isOwner(userId) &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'role', 'isRoleApproved', 'departmentId', 'teamId', 'teamName',
+            'teamIds', 'teamNames', 'accountType', 'status', 'isActive'
+          ])) ||
+
+        // 2. Admin: full update EXCEPT chạm vào role/status của admin khác
+        //    và KHÔNG tự thay đổi role của mình
+        (isAdmin() &&
+          request.auth.uid != userId &&
+          !(resource.data.role == 'admin') &&
+          request.resource.data.get('role', resource.data.role) != 'admin') ||
+
+        // 3. Director (same dept):
+        //    - KHÔNG thể chạm target đang là admin hoặc director khác
+        //    - KHÔNG thể promote lên admin/director/manager
+        //    - KHÔNG thể tự thay đổi role của mình
+        (isDirector() &&
+          !isAdmin() &&
+          request.auth.uid != userId &&
+          get(/databases/$(database)/documents/users/$(userId)).data.departmentId ==
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.departmentId &&
+          // Current role của target phải là employee hoặc guest
+          (resource.data.role == 'employee' || resource.data.role == 'guest') &&
+          // New role chỉ được là employee hoặc guest
+          (request.resource.data.get('role', resource.data.role) == 'employee' ||
+           request.resource.data.get('role', resource.data.role) == 'guest')) ||
+
+        // 4. Manager (same team): limited fields
+        //    - KHÔNG thể chạm admin/director/manager khác
+        //    - KHÔNG thể promote lên admin/director/manager
+        //    - KHÔNG thể tự thay đổi role của mình
+        (isManager() &&
+          !isAdmin() && !isDirector() &&
+          request.auth.uid != userId &&
+          get(/databases/$(database)/documents/users/$(userId)).data.teamId ==
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.teamId &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'role', 'departmentId', 'accountType'
+          ]))
+      );
+
+      // DELETE
+      allow delete: if isAdmin() ||
+        (isDirector() &&
+         get(/databases/$(database)/documents/users/$(userId)).data.departmentId ==
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.departmentId);
     }
 
-    // Rules cho collection meetings
+    // ===== meetings =====
     match /meetings/{meetingId} {
-      // Đọc: Tất cả authenticated user có thể đọc meetings
+      // Helper function to check participant
+      function isParticipant(resourceData) {
+        return request.auth.uid in resourceData.data.participantIds;
+      }
+      
+      function isMeetingCreator(resourceData) {
+        return request.auth.uid == resourceData.data.creatorId;
+      }
+      
+      // READ: Fix lộ toàn bộ meeting
+      allow read: if isAuthenticated() && (
+        isAdmin() ||
+        (isDirector() && (sameDepartment(resource) || isParticipant(resource) || isMeetingCreator(resource))) ||
+        (isManager() && (sameTeam(resource) || isParticipant(resource) || isMeetingCreator(resource))) ||
+        (isEmployee() && (isMeetingCreator(resource) || isParticipant(resource))) ||
+        (isGuest() && isParticipant(resource))
+      );
+      
+      // CREATE: Employee can only create pending & type=personal & must be participant
+      allow create: if isAuthenticated() && (
+        isAdmin() || isDirector() || isManager() ||
+        (isEmployee() && 
+         request.resource.data.status == 'pending' && 
+         request.resource.data.type == 'personal' &&
+         isOwner(request.resource.data.creatorId) &&
+         isParticipant(request.resource))
+      );
+      
+      // UPDATE: Tiered permission system
+      allow update: if isAuthenticated() && (
+        // 1. Admin: full update
+        isAdmin() ||
+        
+        // 2. Director override approval
+        (isDirector() && resource.data.approvalLevel == 'department' && sameDepartment(resource)) ||
+        
+        // 3. Manager override approval
+        (isManager() && resource.data.approvalLevel == 'team' && sameTeam(resource)) ||
+        
+        // 4. Owner cancel
+        (isMeetingCreator(resource) && 
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']) &&
+         request.resource.data.status == 'cancelled') ||
+        
+        // 5. Owner update meeting details (not status/approval)
+        (isMeetingCreator(resource) && 
+         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status', 'approvalStatus', 'approvedBy']) &&
+         resource.data.status == 'pending') ||
+        
+        // 6. ✅ Participant updates own attendanceStatus / hasConfirmed / respondedAt
+        //    Only allowed to touch: participants array, participantIds, updatedAt
+        (isAuthenticated() &&
+         isParticipant(resource) &&
+         request.resource.data.diff(resource.data).affectedKeys()
+           .hasOnly(['participants', 'participantIds', 'updatedAt']))
+      );
+      
+      // DELETE: No hard delete recommended, but Admin can delete.
+      allow delete: if isAdmin();
+      
+      // ===== comments (Bình luận cuộc họp) =====
+      // Path: /meetings/{meetingId}/comments/{commentId}
+      // Subcollection của meetings, check participant từ meeting document
+      match /comments/{commentId} {
+        // Đọc: User phải là creator hoặc participant của meeting
+        // Check từ meeting document: uid == creatorId HOẶC uid nằm trong participantIds
+        allow read: if isAuthenticated() && isMeetingParticipant(meetingId);
+        
+        // Tạo: User phải là participant VÀ phải set đúng authorId VÀ content không rỗng
+        // isMeetingParticipant() sẽ get meeting document và check creatorId/participantIds
+        allow create: if isAuthenticated() && 
+          isMeetingParticipant(meetingId) &&
+          request.resource.data.authorId == request.auth.uid &&
+          request.resource.data.meetingId == meetingId &&
+          request.resource.data.content != null &&
+          request.resource.data.content is string &&
+          request.resource.data.content.size() > 0 &&
+          request.resource.data.createdAt != null &&
+          request.resource.data.updatedAt != null;
+        
+        // Cập nhật: Chỉ author của comment có thể sửa
+        allow update: if isAuthenticated() && 
+          isOwner(resource.data.authorId) &&
+          request.resource.data.authorId == resource.data.authorId &&
+          request.resource.data.meetingId == resource.data.meetingId;
+        
+        // Xóa: Chỉ author của comment có thể xóa
+        allow delete: if isAuthenticated() && 
+          isOwner(resource.data.authorId);
+      }
+    }
+
+    // ===== rooms =====
+    match /rooms/{roomId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isAdmin();
+      allow update: if isAuthenticated() && isAdmin();
+      allow delete: if isAuthenticated() && isAdmin();
+    }
+
+    // ===== departments =====
+    match /departments/{departmentId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && 
+        (isDirector() || isAdmin());
+    }
+
+    // ===== teams =====
+    match /teams/{teamId} {
+      // Read: any authenticated user can read teams (needed for role selection dropdown)
+      // Including pending users who need to select their team
       allow read: if isAuthenticated();
       
-      // Tạo: Employee trở lên có thể tạo meeting
-      allow create: if isAuthenticated() && 
-        (isEmployee() || isManager() || isDirector() || isAdmin());
+      // Create/Update: admin full access, director only for their department
+      allow create, update: if isAuthenticated() && (
+        isAdmin() ||
+        (isDirector() && request.resource.data.departmentId == 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.departmentId)
+      );
       
-      // Cập nhật: Creator, Manager trở lên có thể cập nhật
+      // Delete: only admin
+      allow delete: if isAdmin();
+    }
+
+
+    // ===== notifications =====
+    match /notifications/{notificationId} {
+      // Only privileged roles can broadcast / create notifications
+      allow create: if isAdmin() ||
+        (isDirector() && sameDepartment(request.resource)) ||
+        (isManager() && sameTeam(request.resource));
+
+      // READ:
+      // - Admins can read all
+      // - Creator can always read their own notifications
+      // - Normal users can read notifications targeted to them via:
+      //   - recipients array (canonical)
+      //   - legacy userId field (backward compatibility)
+      allow read: if isAuthenticated() && (
+        isAdmin() ||
+        resource.data.createdBy == request.auth.uid ||
+        (resource.data.recipients != null &&
+          request.auth.uid in resource.data.recipients) ||
+        // Legacy one-to-one notifications that still use userId
+        (resource.data.userId != null &&
+          resource.data.userId == request.auth.uid)
+      );
+      
+      allow update, delete: if isAuthenticated() && (
+        isAdmin() ||
+        resource.data.createdBy == request.auth.uid
+      );
+    }
+
+    // ===== analytics_events =====
+    // Centralized analytics event stream.
+    // - Any authenticated user can WRITE analytics events for tracking.
+    // - Only admins can READ/UPDATE/DELETE analytics events.
+    match /analytics_events/{eventId} {
+      allow create: if isAuthenticated();
+      allow read, update, delete: if isAdmin();
+    }
+
+    // ===== reports =====
+    match /reports/{reportId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() && isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ===== maintenance_records =====
+    match /maintenance_records/{recordId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() && isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ===== room_bookings =====
+    match /room_bookings/{bookingId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() || 
+        isDirector() || 
+        isManager() || 
+        isOwner(resource.data.createdBy) || 
+        request.auth.uid in resource.data.participantIds
+      );
+      
+      // Booking restrictions: Guest and Employee MUST have an approved meeting to book
+      allow create: if isAuthenticated() && (
+        isAdmin() || isDirector() || isManager() ||
+        ((isEmployee() || isGuest()) && 
+         request.resource.data.meetingId != null &&
+         get(/databases/$(database)/documents/meetings/$(request.resource.data.meetingId)).data.status == 'approved' &&
+         (isOwner(request.resource.data.createdBy) || request.auth.uid in get(/databases/$(database)/documents/meetings/$(request.resource.data.meetingId)).data.participantIds))
+      );
+      
+      allow update: if isAuthenticated() && 
+        (
+          isAdmin() || isDirector() || isManager() ||
+          // Owner cancel
+          (isOwner(resource.data.createdBy) && 
+           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']) &&
+           request.resource.data.status == 'cancelled')
+        );
+        
+      allow delete: if isAdmin();
+    }
+
+    // ===== user_booking_stats =====
+    match /user_booking_stats/{userId} {
+      allow read: if isAuthenticated() && 
+        (isOwner(userId) || isAdmin() || isManager());
+      allow create, update: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+
+    // ===== decisions =====
+    match /decisions/{decisionId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
       allow update: if isAuthenticated() && 
         (
           isOwner(resource.data.createdBy) ||
           isManager() || isDirector() || isAdmin()
         );
-      
-      // Xóa: Creator, Director trở lên có thể xóa
       allow delete: if isAuthenticated() && 
         (
           isOwner(resource.data.createdBy) ||
@@ -91,79 +360,60 @@ service cloud.firestore {
         );
     }
 
-    // Rules cho collection rooms
-    match /rooms/{roomId} {
-      // Đọc: Tất cả authenticated user có thể đọc rooms
+    // ===== meeting_minutes =====
+    match /meeting_minutes/{minutesId} {
       allow read: if isAuthenticated();
-      
-      // Tạo: Manager trở lên có thể tạo room
-      allow create: if isAuthenticated() && 
-        (isManager() || isDirector() || isAdmin());
-      
-      // Cập nhật: Manager trở lên có thể cập nhật room
+      allow create: if isAuthenticated();
       allow update: if isAuthenticated() && 
-        (isManager() || isDirector() || isAdmin());
-      
-      // Xóa: Director trở lên có thể xóa room
+        (
+          isOwner(resource.data.createdBy) ||
+          isManager() || isDirector() || isAdmin()
+        );
       allow delete: if isAuthenticated() && 
-        (isDirector() || isAdmin());
+        (
+          isOwner(resource.data.createdBy) ||
+          isDirector() || isAdmin()
+        );
     }
 
-    // Rules cho collection departments
-    match /departments/{departmentId} {
-      // Đọc: Tất cả authenticated user có thể đọc departments
+    // ===== tasks =====
+    match /tasks/{taskId} {
       allow read: if isAuthenticated();
-      
-      // Tạo, cập nhật, xóa: Chỉ Director trở lên
-      allow write: if isAuthenticated() && 
-        (isDirector() || isAdmin());
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() &&
+        (
+          isOwner(resource.data.createdBy) ||
+          isOwner(resource.data.assigneeId) ||
+          isManager() || isDirector() || isAdmin()
+        );
+      allow delete: if isAuthenticated() &&
+        (
+          isOwner(resource.data.createdBy) ||
+          isManager() || isDirector() || isAdmin()
+        );
     }
 
-    // Rules cho collection notifications
-    match /notifications/{notificationId} {
-      // Đọc: User chỉ có thể đọc notification của mình hoặc Admin có thể đọc tất cả
-      allow read: if isAuthenticated() && 
-        (isOwner(resource.data.userId) || isAdmin());
-      
-      // Tạo: System hoặc Manager trở lên có thể tạo notification
-      allow create: if isAuthenticated() && 
-        (isManager() || isDirector() || isAdmin());
-      
-      // Cập nhật: User có thể cập nhật notification của mình (đánh dấu đã đọc)
-      allow update: if isAuthenticated() && 
-        (isOwner(resource.data.userId) || isAdmin());
-      
-      // Xóa: User có thể xóa notification của mình, Admin có thể xóa tất cả
-      allow delete: if isAuthenticated() && 
-        (isOwner(resource.data.userId) || isAdmin());
-    }
+    // ===== files (tài liệu cuộc họp) =====
+    match /files/{fileId} {
+      // Đọc: bất kỳ user đã đăng nhập đều xem được file (theo meetingId đã filter trên app)
+      allow read: if isAuthenticated();
 
-    // Rules cho collection reports
-    match /reports/{reportId} {
-      // Đọc: Manager trở lên có thể đọc reports
-      allow read: if isAuthenticated() && 
-        (isManager() || isDirector() || isAdmin());
-      
-      // Tạo, cập nhật: Director trở lên có thể quản lý reports
-      allow write: if isAuthenticated() && 
-        (isDirector() || isAdmin());
-      
-      // Xóa: Chỉ Admin có thể xóa reports
-      allow delete: if isAdmin();
-    }
+      // Tạo: user đăng nhập có thể upload file
+      allow create: if isAuthenticated();
 
-    // Rules cho collection maintenance_records
-    match /maintenance_records/{recordId} {
-      // Đọc: Manager trở lên có thể đọc maintenance records
-      allow read: if isAuthenticated() && 
-        (isManager() || isDirector() || isAdmin());
-      
-      // Tạo, cập nhật: Director trở lên có thể quản lý maintenance
-      allow write: if isAuthenticated() && 
-        (isDirector() || isAdmin());
-      
-      // Xóa: Chỉ Admin có thể xóa maintenance records
-      allow delete: if isAdmin();
+      // Cập nhật: chỉ uploader hoặc admin/manager/director
+      allow update: if isAuthenticated() &&
+        (
+          isOwner(resource.data.uploaderId) ||
+          isManager() || isDirector() || isAdmin()
+        );
+
+      // Xóa: chỉ uploader hoặc admin/director
+      allow delete: if isAuthenticated() &&
+        (
+          isOwner(resource.data.uploaderId) ||
+          isDirector() || isAdmin()
+        );
     }
 
     // Rules mặc định: Từ chối tất cả các truy cập khác
@@ -171,4 +421,4 @@ service cloud.firestore {
       allow read, write: if false;
     }
   }
-} 
+}

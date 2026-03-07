@@ -72,7 +72,16 @@ Làm theo các bước dưới đây để chạy dự án trên máy của bạ
     flutter pub get
     ```
 
-4.  **Chạy ứng dụng:**
+4.  **Cập nhật cấu trúc database Firestore (Rules & Indexes):**
+    *Bảo đảm Firebase rules và Indexes được cập nhật để app không báo lỗi khi start.*
+    ```bash
+    cd ..
+    firebase deploy --only firestore:rules
+    firebase deploy --only firestore:indexes
+    cd mobile
+    ```
+
+5.  **Chạy ứng dụng:**
     *   Mở một máy ảo (Android/iOS) hoặc kết nối thiết bị thật.
     *   Bạn cũng có thể chọn target là Web hoặc Desktop (Windows/macOS/Linux).
 

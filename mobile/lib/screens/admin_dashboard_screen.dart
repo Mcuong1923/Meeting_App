@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:metting_app/providers/auth_provider.dart' as app_auth;
-import 'package:metting_app/constants.dart';
-import 'package:iconly/iconly.dart';
 import 'role_management_screen.dart';
 
 import 'room_management_screen.dart';
@@ -11,6 +9,7 @@ import 'role_approval_screen.dart';
 
 import 'meeting_approval_list_screen.dart';
 import 'all_tasks_screen.dart';
+import 'analytics_dashboard_screen.dart';
 
 class AdminDashboardScreen extends StatelessWidget {
   const AdminDashboardScreen({Key? key}) : super(key: key);
@@ -21,7 +20,7 @@ class AdminDashboardScreen extends StatelessWidget {
     final userModel = authProvider.userModel;
     final isAdmin = userModel?.isAdmin == true;
     final isDirector = userModel?.isDirector == true;
-    final colorScheme = Theme.of(context).colorScheme;
+    final isManager = userModel?.isManager == true;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FB),
@@ -63,7 +62,8 @@ class AdminDashboardScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (isAdmin || isDirector) ...[
+            // Quản lý vai trò: Admin + Director + Manager (phạm vi đã được giới hạn ở provider + Firestore rules)
+            if (isAdmin || isDirector || isManager) ...[
               _buildSectionTitle('Quản lý người dùng'),
               const SizedBox(height: 12),
               _buildFeatureCard(
@@ -83,7 +83,11 @@ class AdminDashboardScreen extends StatelessWidget {
               const SizedBox(height: 12),
             ],
             
-            if (isAdmin) ...[
+            // Các mục dưới đây tùy theo quyền:
+            // - Phê duyệt vai trò: Admin + Director (scope phòng ban)
+            // - Phê duyệt cuộc họp: Admin + Director + Manager (scope team/department)
+            // - Quản lý phòng họp / setup / thống kê / nhật ký: chỉ Admin
+            if (isAdmin || isDirector) ...[
               _buildFeatureCard(
                 context,
                 title: 'Phê duyệt vai trò',
@@ -99,7 +103,10 @@ class AdminDashboardScreen extends StatelessWidget {
                 },
               ),
               const SizedBox(height: 24),
+            ],
 
+            // Phê duyệt cuộc họp: Admin + Director + Manager (phạm vi được MeetingProvider + rules giới hạn)
+            if (isAdmin || isDirector || isManager) ...[
               _buildSectionTitle('Quản lý cuộc họp'),
               const SizedBox(height: 12),
               _buildFeatureCard(
@@ -118,6 +125,10 @@ class AdminDashboardScreen extends StatelessWidget {
               ),
 
               const SizedBox(height: 24),
+            ],
+
+            // Các mục sau CHỈ Admin
+            if (isAdmin) ...[
               _buildSectionTitle('Quản lý phòng họp'),
               const SizedBox(height: 12),
               
@@ -152,24 +163,6 @@ class AdminDashboardScreen extends StatelessWidget {
               ),
 
               const SizedBox(height: 24),
-              _buildSectionTitle('Quản lý công việc'),
-              const SizedBox(height: 12),
-              _buildFeatureCard(
-                context,
-                title: 'Quản lý công việc',
-                subtitle: 'Theo dõi và quản lý công việc',
-                icon: Icons.task_outlined,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const AllTasksScreen(),
-                    ),
-                  );
-                },
-              ),
-              
-              const SizedBox(height: 24),
               _buildSectionTitle('Thống kê và báo cáo'),
               const SizedBox(height: 12),
               
@@ -179,8 +172,11 @@ class AdminDashboardScreen extends StatelessWidget {
                 subtitle: 'Xem báo cáo và thống kê hệ thống',
                 icon: Icons.analytics_outlined, // Changed to outlined
                 onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Chức năng đang phát triển')),
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const AnalyticsDashboardScreen(),
+                    ),
                   );
                 },
               ),
@@ -197,6 +193,26 @@ class AdminDashboardScreen extends StatelessWidget {
                 },
               ),
             ],
+            // Quản lý công việc: Admin + Director + Manager
+            if (isAdmin || isDirector || isManager) ...[
+              _buildSectionTitle('Quản lý công việc'),
+              const SizedBox(height: 12),
+              _buildFeatureCard(
+                context,
+                title: 'Quản lý công việc',
+                subtitle: 'Theo dõi và quản lý công việc',
+                icon: Icons.task_outlined,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const AllTasksScreen(),
+                    ),
+                  );
+                },
+              ),
+            ],
+
             const SizedBox(height: 40),
           ],
         ),
@@ -227,7 +243,7 @@ class AdminDashboardScreen extends StatelessWidget {
   }) {
     // Determine color based on app theme or fixed color
     // Keeping it simple and consistent as requested
-    final iconColor = const Color(0xFF57636C); 
+    const iconColor = Color(0xFF57636C); 
 
     return Container(
       decoration: BoxDecoration(

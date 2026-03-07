@@ -8,12 +8,14 @@ class TaskDetailScreen extends StatefulWidget {
   final MeetingTask task;
   final Function(MeetingTask) onUpdate;
   final Function(MeetingTask) onDelete;
+  final ScrollController? scrollController;
 
   const TaskDetailScreen({
     Key? key,
     required this.task,
     required this.onUpdate,
     required this.onDelete,
+    this.scrollController,
   }) : super(key: key);
 
   static void show(
@@ -27,13 +29,14 @@ class TaskDetailScreen extends StatefulWidget {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.95,
+        initialChildSize: 0.9,
         minChildSize: 0.5,
-        maxChildSize: 1.0,
+        maxChildSize: 0.95,
         builder: (_, controller) => TaskDetailScreen(
           task: task,
           onUpdate: onUpdate,
           onDelete: onDelete,
+          scrollController: controller,
         ),
       ),
     );
@@ -45,10 +48,8 @@ class TaskDetailScreen extends StatefulWidget {
 
 class _TaskDetailScreenState extends State<TaskDetailScreen> {
   late MeetingTask _editedTask;
-  // Separate controllers/state for complex edits
   late TextEditingController _descriptionController;
   late TextEditingController _commentController;
-  final ScrollController _scrollController = ScrollController();
   
   bool _isDirty = false;
   bool _isSaving = false;
@@ -67,7 +68,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   void dispose() {
     _descriptionController.dispose();
     _commentController.dispose();
-    _scrollController.dispose();
     super.dispose();
   }
 
@@ -110,8 +110,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Row(
-              children: const [
+            content: const Row(
+              children: [
                 Icon(Icons.check_circle, color: Colors.white, size: 20),
                 SizedBox(width: 12),
                 Text('Đã lưu thay đổi', style: TextStyle(fontWeight: FontWeight.w600)),
@@ -325,46 +325,53 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFFF5F7FA),
-        borderRadius: BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
-      ),
-      child: Column(
-        children: [
-          // Header
-          _buildHeader(),
-          
-          // Tabs
-          _buildTabs(),
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFFF5F7FA),
+          borderRadius: BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
+        ),
+        child: Column(
+          children: [
+            // Header
+            _buildHeader(),
+            
+            // Tabs - kéo lên sát header
+            Transform.translate(
+              offset: const Offset(0, -30),
+              child: _buildTabs(),
+            ),
 
-          // Content
-          Expanded(
-            child: SingleChildScrollView(
-              controller: _scrollController,
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                   if (_activeTab == 0) _buildMainDetails(),
-                   if (_activeTab == 1) _buildSubtasks(),
-                   if (_activeTab == 2) _buildComments(),
-                   if (_activeTab == 3) _buildHistory(),
-                   const SizedBox(height: 100), // Space for footer
-                ],
+            // Content
+            Expanded(
+              child: SingleChildScrollView(
+                controller: widget.scrollController,
+                padding: const EdgeInsets.fromLTRB(16,0, 16, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                     if (_activeTab == 0) _buildMainDetails(),
+                     if (_activeTab == 1) _buildSubtasks(),
+                     if (_activeTab == 2) _buildComments(),
+                     if (_activeTab == 3) _buildHistory(),
+                     const SizedBox(height: 80), // Space for footer
+                  ],
+                ),
               ),
             ),
-          ),
-          
-          // Sticky Footer
-          if (_isDirty) _buildStickyFooter(),
-        ],
+            
+            // Sticky Footer
+            if (_isDirty) _buildStickyFooter(),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildHeader() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 35),
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
@@ -426,63 +433,73 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Title
-        Text(_editedTask.title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 16),
-        
-        // Status & Priority Selectors (Refined Design)
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 0), // Parent already has padding
-          child: Row(
-            children: [
-              // Status Selector
-              Expanded(
-                child: _buildCustomDropdown<String>(
-                  title: 'Trạng thái',
-                  value: _editedTask.status,
-                  itemBuilder: (context) => [
-                    _buildPopupItem('pending', _buildStatusChip('pending')),
-                    _buildPopupItem('in_progress', _buildStatusChip('in_progress')),
-                    _buildPopupItem('completed', _buildStatusChip('completed')),
-                  ],
-                  childBuilder: (val) => _buildStatusChip(val, isSelected: true),
-                  onSelected: (val) {
-                    if (val != _editedTask.status) {
-                      setState(() {
-                         _editedTask = _editedTask.copyWith(
-                           status: val,
-                           progress: val == 'completed' ? 100 : (val == 'pending' ? 0 : _editedTask.progress),
-                         );
-                      });
-                      _markDirty();
-                    }
-                  },
-                ),
-              ),
-              const SizedBox(width: 16),
-              // Priority Selector
-              Expanded(
-                child: _buildCustomDropdown<String>(
-                  title: 'Độ ưu tiên',
-                  value: _editedTask.priority,
-                  itemBuilder: (context) => [
-                    _buildPopupItem('high', _buildPriorityChip('high')),
-                    _buildPopupItem('medium', _buildPriorityChip('medium')),
-                    _buildPopupItem('low', _buildPriorityChip('low')),
-                  ],
-                  childBuilder: (val) => _buildPriorityChip(val, isSelected: true),
-                  onSelected: (val) {
-                    if (val != _editedTask.priority) {
-                      setState(() {
-                         _editedTask = _editedTask.copyWith(priority: val);
-                      });
-                      _markDirty();
-                    }
-                  },
-                ),
-              ),
-            ],
+        // Title section
+        Text(
+          'Tên công việc',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: Colors.grey.shade600,
           ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          _editedTask.title,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 20),
+        
+        // Status & Priority Selectors
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Status Selector
+            Expanded(
+              child: _buildCustomDropdown<String>(
+                title: 'Trạng thái',
+                value: _editedTask.status,
+                itemBuilder: (context) => [
+                  _buildPopupItem('pending', _buildStatusChip('pending')),
+                  _buildPopupItem('in_progress', _buildStatusChip('in_progress')),
+                  _buildPopupItem('completed', _buildStatusChip('completed')),
+                ],
+                childBuilder: (val) => _buildStatusChip(val, isSelected: true),
+                onSelected: (val) {
+                  if (val != _editedTask.status) {
+                    setState(() {
+                       _editedTask = _editedTask.copyWith(
+                         status: val,
+                         progress: val == 'completed' ? 100 : (val == 'pending' ? 0 : _editedTask.progress),
+                       );
+                    });
+                    _markDirty();
+                  }
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Priority Selector
+            Expanded(
+              child: _buildCustomDropdown<String>(
+                title: 'Độ ưu tiên',
+                value: _editedTask.priority,
+                itemBuilder: (context) => [
+                  _buildPopupItem('high', _buildPriorityChip('high')),
+                  _buildPopupItem('medium', _buildPriorityChip('medium')),
+                  _buildPopupItem('low', _buildPriorityChip('low')),
+                ],
+                childBuilder: (val) => _buildPriorityChip(val, isSelected: true),
+                onSelected: (val) {
+                  if (val != _editedTask.priority) {
+                    setState(() {
+                       _editedTask = _editedTask.copyWith(priority: val);
+                    });
+                    _markDirty();
+                  }
+                },
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 24),
         
@@ -516,8 +533,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                    child: Column(
                      crossAxisAlignment: CrossAxisAlignment.start,
                      children: [
-                       Row(
-                         children: const [
+                       const Row(
+                         children: [
                            Text('Hạn hoàn thành', style: TextStyle(color: Colors.grey, fontSize: 12)),
                            SizedBox(width: 4),
                            Icon(Icons.edit, size: 12, color: Colors.blue),
@@ -731,9 +748,10 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Text(title, style: TextStyle(color: Colors.grey.shade500, fontSize: 11, fontWeight: FontWeight.w500)),
-        const SizedBox(height: 8),
+        Text(title, style: TextStyle(color: Colors.grey.shade600, fontSize: 12, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 6),
         Builder(
           builder: (context) {
             return GestureDetector(
@@ -763,21 +781,19 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                 });
               },
               child: Container(
-                height: 44, // Target height 40-44px
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(8), // Reduced radius
+                  borderRadius: BorderRadius.circular(8),
                   boxShadow: [
                     BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6, offset: const Offset(0, 2)),
                   ],
-                  border: Border.all(color: Colors.grey.shade100),
+                  border: Border.all(color: Colors.grey.shade200),
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                alignment: Alignment.center,
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween, // Ensure spread
                   children: [
                     Expanded(child: childBuilder(value)),
+                    const SizedBox(width: 4),
                     Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: Colors.grey.shade400),
                   ],
                 ),
@@ -802,31 +818,36 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     Color bg;
     Color fg;
     String label;
+    String shortLabel;
     IconData icon;
 
     switch (status) {
       case 'pending':
-        bg = const Color(0xFFFFF7E6); // Warning light (Orangeish)
-        fg = const Color(0xFFFF8D4F); // Warning text
+        bg = const Color(0xFFFFF7E6);
+        fg = const Color(0xFFFF8D4F);
         label = 'Chưa bắt đầu';
+        shortLabel = 'Chờ';
         icon = Icons.hourglass_empty_rounded;
         break;
       case 'in_progress':
-        bg = const Color(0xFFE6F7FF); // Info light (Blueish)
-        fg = const Color(0xFF40A9FF); // Info text
+        bg = const Color(0xFFE6F7FF);
+        fg = const Color(0xFF40A9FF);
         label = 'Đang thực hiện';
+        shortLabel = 'Đang thực...';
         icon = Icons.autorenew_rounded;
         break;
       case 'completed':
-        bg = const Color(0xFFF6FFED); // Success light (Greenish)
-        fg = const Color(0xFF73D13D); // Success text
+        bg = const Color(0xFFF6FFED);
+        fg = const Color(0xFF73D13D);
         label = 'Hoàn thành';
+        shortLabel = 'Xong';
         icon = Icons.check_circle_outline_rounded;
         break;
       default:
         bg = Colors.grey.shade100;
         fg = Colors.grey;
         label = 'Không xác định';
+        shortLabel = 'N/A';
         icon = Icons.help_outline;
     }
 
@@ -834,31 +855,29 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
        return Row(
          mainAxisSize: MainAxisSize.min,
          children: [
-             // For selected state inside button: show icon + text cleanly
-             // User requested "Màu chỉ nên ở icon/chip, không làm nền quá đậm để tránh rối."
-             // And "Icon + text căn giữa theo chiều dọc"
              Container(
-               padding: const EdgeInsets.all(4),
+               padding: const EdgeInsets.all(3),
                decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
-                child: Icon(icon, size: 16, color: fg),
+               child: Icon(icon, size: 14, color: fg),
              ),
-             const SizedBox(width: 8),
+             const SizedBox(width: 6),
              Flexible(
                child: Text(
-                 label, 
-                 style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.black87),
+                 shortLabel, 
+                 style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: fg),
                  overflow: TextOverflow.ellipsis,
+                 maxLines: 1,
                ),
              ),
            ],
        );
     }
     
-    // In dropdown list
+    // In dropdown list - show full label
     return Row(
       children: [
-        Icon(icon, size: 18, color: fg),
-        const SizedBox(width: 10),
+        Icon(icon, size: 16, color: fg),
+        const SizedBox(width: 8),
         Expanded(
           child: Text(
             label, 
@@ -871,30 +890,27 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   }
 
   Widget _buildPriorityChip(String priority, {bool isSelected = false}) {
-     Color bg;
+    Color bg;
     Color fg;
     String label;
     IconData icon;
 
     switch (priority) {
       case 'high':
-        // Cao: đỏ/cam nhẹ
-        bg = const Color(0xFFFFF1F0); // Red light
-        fg = const Color(0xFFFF4D4F); // Red text
+        bg = const Color(0xFFFFF1F0);
+        fg = const Color(0xFFFF4D4F);
         label = 'Cao';
         icon = Icons.priority_high_rounded;
         break;
       case 'medium':
-        // TB: xanh dương nhạt (Updated requirement)
-        bg = const Color(0xFFE6F7FF); // Blue light
-        fg = const Color(0xFF1890FF); // Blue text
+        bg = const Color(0xFFE6F7FF);
+        fg = const Color(0xFF1890FF);
         label = 'Trung bình';
         icon = Icons.remove;
         break;
       case 'low':
-        // Thấp: xanh lá nhạt
-        bg = const Color(0xFFF6FFED); // Green light
-        fg = const Color(0xFF52C41A); // Green text
+        bg = const Color(0xFFF6FFED);
+        fg = const Color(0xFF52C41A);
         label = 'Thấp';
         icon = Icons.arrow_downward_rounded;
         break;
@@ -910,16 +926,17 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
          mainAxisSize: MainAxisSize.min,
          children: [
             Container(
-               padding: const EdgeInsets.all(4),
+               padding: const EdgeInsets.all(3),
                decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
-                child: Icon(icon, size: 16, color: fg),
+               child: Icon(icon, size: 14, color: fg),
              ),
-             const SizedBox(width: 8),
+             const SizedBox(width: 6),
              Flexible(
                child: Text(
                  label, 
-                 style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.black87),
+                 style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: fg),
                  overflow: TextOverflow.ellipsis,
+                 maxLines: 1,
                ),
              ),
            ],
@@ -928,8 +945,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
     return Row(
       children: [
-        Icon(icon, size: 18, color: fg),
-        const SizedBox(width: 10),
+        Icon(icon, size: 16, color: fg),
+        const SizedBox(width: 8),
         Expanded(
           child: Text(
              label, 

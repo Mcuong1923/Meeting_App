@@ -47,7 +47,11 @@ class MeetingFormController extends ChangeNotifier {
 
   List<MeetingParticipant> _participants = [];
   List<String> _actionItems = [];
-  List<PlatformFile> _attachments = [];
+  final List<PlatformFile> _attachments = [];
+  
+  // Room selection
+  String? _selectedRoomId;
+  String? _selectedRoomName;
 
   // Participant management
   List<UserModel> _availableParticipants = [];
@@ -85,6 +89,18 @@ class MeetingFormController extends ChangeNotifier {
   List<UserModel> get suggestedParticipants => _suggestedParticipants;
   bool get isLoadingParticipants => _isLoadingParticipants;
   bool get showParticipantSelection => _showParticipantSelection;
+  String? get selectedRoomId => _selectedRoomId;
+  String? get selectedRoomName => _selectedRoomName;
+
+  // Room selection methods
+  void setSelectedRoom(String? roomId, String? roomName) {
+    _selectedRoomId = roomId;
+    _selectedRoomName = roomName;
+    if (roomName != null) {
+      locationController.text = roomName;
+    }
+    notifyListeners();
+  }
 
   void initializeServices(BuildContext context) {
     _organizationProvider =
@@ -325,8 +341,11 @@ class MeetingFormController extends ChangeNotifier {
         startTime: startDateTime,
         endTime: endDateTime,
         durationMinutes: durationMinutes,
-        physicalLocation:
-            locationController.text.isNotEmpty ? locationController.text : null,
+        // Room booking
+        roomId: _selectedRoomId,
+        roomName: _selectedRoomName,
+        physicalLocation: _selectedRoomName ?? 
+            (locationController.text.isNotEmpty ? locationController.text : null),
         virtualMeetingLink: virtualLinkController.text.isNotEmpty
             ? virtualLinkController.text
             : null,

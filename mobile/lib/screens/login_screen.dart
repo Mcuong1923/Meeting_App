@@ -3,13 +3,10 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import 'package:metting_app/providers/auth_provider.dart' as app_auth;
 import 'package:metting_app/providers/theme_provider.dart';
-import 'package:metting_app/components/background.dart';
 import 'package:metting_app/constants.dart';
 import 'package:metting_app/screens/signup_screen.dart';
 import 'package:metting_app/screens/home_screen.dart';
 import 'package:metting_app/components/already_have_an_account_acheck.dart';
-import 'package:metting_app/components/or_divider.dart';
-import 'package:metting_app/components/social_icon.dart';
 import 'package:metting_app/components/social_signup.dart';
 import 'package:metting_app/components/rounded_input_field.dart';
 import 'package:metting_app/components/rounded_password_field.dart';
@@ -200,6 +197,8 @@ class _LoginFormState extends State<LoginForm> {
                     ? null
                     : () async {
                         if (_formKey.currentState!.validate()) {
+                          final nav = Navigator.of(context);
+                          final messenger = ScaffoldMessenger.of(context);
                           try {
                             await authProvider.login(
                               emailController.text.trim(),
@@ -209,21 +208,26 @@ class _LoginFormState extends State<LoginForm> {
                             if (!mounted) return;
 
                             // Chuyển đến màn hình chính sau khi đăng nhập thành công
-                            Navigator.pushReplacement(
-                              context,
+                            nav.pushReplacement(
                               MaterialPageRoute(
                                 builder: (context) => const HomeScreen(),
                               ),
                             );
-
-                            // Không cần snackbar ở đây nữa vì màn hình đã chuyển
                           } catch (e) {
                             if (!mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
+                            final msg = e.toString().replaceAll('Exception: ', '');
+                            messenger.showSnackBar(
                               SnackBar(
-                                content: Text(
-                                    e.toString().replaceAll('Exception: ', '')),
-                                backgroundColor: Colors.red,
+                                content: Row(
+                                  children: [
+                                    const Icon(Icons.error_outline, color: Colors.white, size: 20),
+                                    const SizedBox(width: 8),
+                                    Expanded(child: Text(msg)),
+                                  ],
+                                ),
+                                backgroundColor: Colors.red.shade700,
+                                behavior: SnackBarBehavior.floating,
+                                duration: const Duration(seconds: 5),
                               ),
                             );
                           }

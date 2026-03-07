@@ -59,7 +59,7 @@ class CustomBottomNavBar extends StatelessWidget {
                         shape: BoxShape.circle,
                         boxShadow: isSelected
                             ? [
-                                BoxShadow(
+                                const BoxShadow(
                                   color: Colors.black12,
                                   blurRadius: 8,
                                   offset: Offset(0, 4),

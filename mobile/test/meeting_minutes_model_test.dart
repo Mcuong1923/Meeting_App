@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:metting_app/models/meeting_minutes_model.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 void main() {
   group('MeetingMinutesModel Tests', () {

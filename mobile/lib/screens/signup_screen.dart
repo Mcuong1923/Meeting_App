@@ -4,11 +4,9 @@ import 'package:provider/provider.dart';
 import 'package:metting_app/providers/auth_provider.dart' as app_auth;
 import 'package:metting_app/providers/theme_provider.dart';
 import 'package:metting_app/constants.dart';
-import 'package:metting_app/screens/home_screen.dart';
 import 'package:metting_app/screens/login_screen.dart' show LoginScreen;
+import 'package:metting_app/screens/role_selection_screen.dart';
 import 'package:metting_app/components/already_have_an_account_acheck.dart';
-import 'package:metting_app/components/or_divider.dart';
-import 'package:metting_app/components/social_icon.dart';
 import 'package:metting_app/components/social_signup.dart';
 import 'package:metting_app/components/rounded_input_field.dart';
 import 'package:metting_app/components/rounded_password_field.dart';
@@ -168,17 +166,29 @@ class _SignUpFormState extends State<SignUpForm> {
 
                             if (!mounted) return;
 
-                            // Chuyển đến màn hình đăng nhập với thông tin vừa đăng ký
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => LoginScreen(
-                                  initialEmail: email,
-                                  initialPassword: password,
-                                  showSuccessSnackbar: true,
+                            // Đợi userModel được load xong (tối đa 5 giây)
+                            // để xác định đúng màn hình cần điều hướng
+                            int retries = 0;
+                            while (authProvider.userModel == null && retries < 25) {
+                              await Future.delayed(const Duration(milliseconds: 200));
+                              retries++;
+                            }
+
+                            if (!mounted) return;
+
+                            // Lưu navigator ref trước async gap
+                            final nav = Navigator.of(context);
+
+                            // Điều hướng đúng màn hình theo trạng thái user
+                            if (authProvider.needsRoleSelection) {
+                              nav.pushReplacement(
+                                MaterialPageRoute(
+                                  builder: (_) => const RoleSelectionScreen(),
                                 ),
-                              ),
-                            );
+                              );
+                            } else {
+                              nav.pushReplacementNamed('/home');
+                            }
                           } catch (e) {
                             if (!mounted) return;
                             ScaffoldMessenger.of(context).showSnackBar(

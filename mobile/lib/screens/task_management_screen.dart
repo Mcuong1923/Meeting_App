@@ -10,11 +10,13 @@ import '../providers/meeting_provider.dart';
 
 class TaskManagementScreen extends StatefulWidget {
   final MeetingModel meeting;
+  final String meetingId; // Explicit meetingId to avoid lookup errors
   final List<MeetingTask>? initialTasks;
 
   const TaskManagementScreen({
     Key? key,
     required this.meeting,
+    required this.meetingId,
     this.initialTasks,
   }) : super(key: key);
 
@@ -25,22 +27,22 @@ class TaskManagementScreen extends StatefulWidget {
 class _TaskManagementScreenState extends State<TaskManagementScreen> with SingleTickerProviderStateMixin {
   // late List<MeetingTask> _tasks; // Removed to fix conflict with getter
   String _selectedStatusTab = MeetingTaskStatus.pending; // pending, in_progress, completed
-  String _selectedPriority = 'all';
-  String _viewMode = 'list';
+  final String _selectedPriority = 'all';
+  final String _viewMode = 'list';
 
   @override
   void initState() {
     super.initState();
-    print('[TASK_SCREEN][INIT] initializing... meetingId=${widget.meeting.id}');
-    // Load tasks from provider
+    print('[TASK_SCREEN][INIT] initializing... meetingId=${widget.meetingId} (meeting.id=${widget.meeting.id})');
+    // Load tasks from provider using explicit meetingId
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      print('[TASK_SCREEN][POST_FRAME] calling loadTasks...');
-      context.read<MeetingProvider>().loadTasks(widget.meeting.id);
+      print('[TASK_SCREEN][POST_FRAME] calling loadTasks with meetingId=${widget.meetingId}');
+      context.read<MeetingProvider>().loadTasks(widget.meetingId);
     });
   }
 
-  // Helper to access tasks from provider
-  List<MeetingTask> get _tasks => context.watch<MeetingProvider>().tasks;
+  // Helper to access tasks from provider (filtered by meetingId for safety)
+  List<MeetingTask> get _tasks => context.watch<MeetingProvider>().getTasksForMeeting(widget.meetingId);
 
   List<MeetingTask> get _filteredTasks {
     return _tasks.where((task) {

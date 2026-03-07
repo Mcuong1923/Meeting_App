@@ -194,7 +194,7 @@ class DateTimePickerCard extends StatelessWidget {
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.error_outline,
                         size: 16,
                         color: Colors.red,

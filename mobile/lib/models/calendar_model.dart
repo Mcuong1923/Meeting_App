@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:metting_app/models/meeting_model.dart';
-import 'package:metting_app/models/user_role.dart' hide MeetingStatus;
 
 /// Loại sự kiện trong lịch
 enum CalendarEventType {
@@ -289,6 +288,8 @@ class CalendarEvent {
         return '#BDBDBD'; // Grey
       case MeetingStatus.completed:
         return '#42A5F5'; // Blue
+      case MeetingStatus.expired:
+        return '#9E9E9E'; // Dark Grey - expired pending
     }
   }
 }

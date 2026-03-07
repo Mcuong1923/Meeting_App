@@ -6,7 +6,6 @@ import '../providers/meeting_provider.dart';
 import '../providers/notification_provider.dart';
 import '../models/meeting_model.dart';
 import '../models/user_model.dart';
-import '../models/user_role.dart' hide MeetingStatus;
 import 'meeting_create_screen.dart';
 
 class MeetingListScreen extends StatefulWidget {
@@ -18,6 +17,13 @@ class MeetingListScreen extends StatefulWidget {
 
 class _MeetingListScreenState extends State<MeetingListScreen> {
   MeetingListType _selectedType = MeetingListType.today;
+
+  // ===== Visual tokens (match new meeting list design screenshot) =====
+  static const Color _screenBg = Color(0xFFF6F8FC);
+  static const Color _accentPurple = Color(0xFF8E6BFF);
+  static const Color _textPrimary = Color(0xFF101828);
+  static const Color _textSecondary = Color(0xFF667085);
+  static const Color _chipBorder = Color(0xFFE4E7EC);
 
   @override
   void initState() {
@@ -38,18 +44,26 @@ class _MeetingListScreenState extends State<MeetingListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FD),
+      backgroundColor: _screenBg,
       body: Consumer<AuthProvider>(
         builder: (context, authProvider, child) {
           if (authProvider.userModel == null) {
             return const Center(child: CircularProgressIndicator());
           }
 
+          // Responsive padding
+          final screenWidth = MediaQuery.sizeOf(context).width;
+          final scale = (screenWidth / 375).clamp(0.85, 1.3);
+          final horizontalPadding = (16 * scale).clamp(12.0, 20.0);
+          
           return Column(
             children: [
               // Dashboard Cards Grid
               Padding(
-                padding: const EdgeInsets.all(16),
+                padding: EdgeInsets.symmetric(
+                  horizontal: horizontalPadding,
+                  vertical: 12 * scale,
+                ),
                 child: _buildDashboardCards(authProvider.userModel!),
               ),
               
@@ -71,11 +85,11 @@ class _MeetingListScreenState extends State<MeetingListScreen> {
           if (canCreate) {
             return FloatingActionButton(
               onPressed: () => _navigateToCreateMeeting(),
-              backgroundColor: const Color(0xFF9B7FED),
+              backgroundColor: _accentPurple,
               foregroundColor: Colors.white,
-              elevation: 4,
+              elevation: 8,
               shape: const CircleBorder(),
-              child: const Icon(Icons.add, size: 32),
+              child: const Icon(Icons.add, size: 30),
             );
           }
           return const SizedBox();
@@ -87,6 +101,14 @@ class _MeetingListScreenState extends State<MeetingListScreen> {
   Widget _buildDashboardCards(UserModel currentUser) {
     final meetingProvider = Provider.of<MeetingProvider>(context);
     final allMeetings = meetingProvider.meetings;
+    
+    // Responsive scale based on iPhone 11 (375px width)
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final scale = (screenWidth / 375).clamp(0.85, 1.3);
+    
+    // Calculate aspect ratio based on screen width
+    // Smaller screens need smaller aspect ratio (taller cards)
+    final aspectRatio = screenWidth < 360 ? 1.1 : (screenWidth < 400 ? 1.2 : 1.3);
     
     // Calculate counts
     final todayCount = allMeetings.where((m) {
@@ -105,45 +127,51 @@ class _MeetingListScreenState extends State<MeetingListScreen> {
         m.participants.any((p) => p.userId == currentUser.id)
     ).length;
 
+    final spacing = (12 * scale).clamp(8.0, 16.0);
+
     return GridView.count(
       crossAxisCount: 2,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      childAspectRatio: 1.3, // Increased from 1.6 to give more height
+      mainAxisSpacing: spacing,
+      crossAxisSpacing: spacing,
+      childAspectRatio: aspectRatio,
       children: [
         _buildDashboardCard(
           title: 'Hôm nay',
           count: todayCount,
           icon: Icons.today_rounded,
-          color: const Color(0xFFB8C5F2), // Light blue-purple
+          color: const Color(0xFFB8C5F2),
           isSelected: _selectedType == MeetingListType.today,
           onTap: () => setState(() => _selectedType = MeetingListType.today),
+          scale: scale,
         ),
         _buildDashboardCard(
           title: 'Tất cả',
           count: allCount,
           icon: Icons.calendar_month_rounded,
-          color: const Color(0xFFFFF9B1), // Light yellow
+          color: const Color(0xFFFFF9B1),
           isSelected: _selectedType == MeetingListType.all,
           onTap: () => setState(() => _selectedType = MeetingListType.all),
+          scale: scale,
         ),
         _buildDashboardCard(
           title: 'Chờ duyệt',
           count: pendingCount,
           icon: Icons.pending_actions_rounded,
-          color: const Color(0xFFCBF3E7), // Light cyan/mint
+          color: const Color(0xFFCBF3E7),
           isSelected: _selectedType == MeetingListType.pending,
           onTap: () => setState(() => _selectedType = MeetingListType.pending),
+          scale: scale,
         ),
         _buildDashboardCard(
           title: 'Của tôi',
           count: myMeetingsCount,
           icon: Icons.person_rounded,
-          color: const Color(0xFFFDD7E8), // Light pink
+          color: const Color(0xFFFDD7E8),
           isSelected: _selectedType == MeetingListType.myMeetings,
           onTap: () => setState(() => _selectedType = MeetingListType.myMeetings),
+          scale: scale,
         ),
       ],
     );
@@ -156,59 +184,69 @@ class _MeetingListScreenState extends State<MeetingListScreen> {
     required Color color,
     required bool isSelected,
     required VoidCallback onTap,
+    double scale = 1.0,
   }) {
+    // Responsive sizes
+    final padding = (12 * scale).clamp(10.0, 16.0);
+    final iconContainerPadding = (6 * scale).clamp(5.0, 8.0);
+    final iconSize = (18 * scale).clamp(16.0, 22.0);
+    final titleFontSize = (12 * scale).clamp(10.0, 14.0);
+    final countFontSize = (30 * scale).clamp(22.0, 36.0);
+    
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(padding),
         decoration: BoxDecoration(
           color: color,
-          borderRadius: BorderRadius.circular(20),
-          border: isSelected 
-              ? Border.all(color: const Color(0xFF9B7FED), width: 3)
+          borderRadius: BorderRadius.circular(22),
+          border: isSelected
+              ? Border.all(color: _accentPurple.withOpacity(0.55), width: 2)
               : null,
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: const Color(0xFF9B7FED).withOpacity(0.3),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ]
-              : [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 18,
+              offset: const Offset(0, 10),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: EdgeInsets.all(iconContainerPadding),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.7),
+                color: Colors.white.withOpacity(0.85),
                 shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.06),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
-              child: Icon(icon, color: Colors.grey.shade700, size: 20),
+              child: Icon(icon, color: const Color(0xFF344054), size: iconSize),
             ),
             const Spacer(),
             Text(
               title,
               style: TextStyle(
-                color: Colors.grey.shade800,
-                fontSize: 13,
+                color: const Color(0xFF344054),
+                fontSize: titleFontSize,
                 fontWeight: FontWeight.w500,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(height: 4),
+            SizedBox(height: 2 * scale),
             Text(
               count.toString(),
-              style: const TextStyle(
-                color: Color(0xFF2D2D2D),
-                fontSize: 24,
+              style: TextStyle(
+                color: _textPrimary,
+                fontSize: countFontSize,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -250,14 +288,20 @@ class _MeetingListScreenState extends State<MeetingListScreen> {
           return _buildEmptyState(type);
         }
 
+        // Responsive padding
+        final screenWidth = MediaQuery.sizeOf(context).width;
+        final scale = (screenWidth / 375).clamp(0.85, 1.3);
+        final listPadding = (16 * scale).clamp(12.0, 20.0);
+        
         return RefreshIndicator(
           onRefresh: () async => _loadMeetings(),
-          child: ListView.builder(
-            padding: const EdgeInsets.all(16),
+          child: ListView.separated(
+            padding: EdgeInsets.all(listPadding),
             itemCount: meetings.length,
+            separatorBuilder: (context, index) => SizedBox(height: 10 * scale),
             itemBuilder: (context, index) {
               final meeting = meetings[index];
-              return _buildMeetingCard(meeting, currentUser);
+              return _buildMeetingCard(meeting, currentUser, scale);
             },
           ),
         );
@@ -271,6 +315,11 @@ class _MeetingListScreenState extends State<MeetingListScreen> {
     IconData icon = Icons.meeting_room;
 
     switch (type) {
+      case MeetingListType.today:
+        message = 'Hôm nay chưa có cuộc họp';
+        subtitle = 'Các cuộc họp hôm nay sẽ hiển thị ở đây';
+        icon = Icons.today_outlined;
+        break;
       case MeetingListType.all:
         message = 'Chưa có cuộc họp nào';
         subtitle = 'Danh sách cuộc họp sẽ hiển thị ở đây';
@@ -310,8 +359,8 @@ class _MeetingListScreenState extends State<MeetingListScreen> {
             Container(
               width: 80,
               height: 80,
-              decoration: BoxDecoration(
-                color: const Color(0xFFE3F2FD), // Light blue background
+              decoration: const BoxDecoration(
+                color: Color(0xFFE3F2FD), // Light blue background
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -351,20 +400,27 @@ class _MeetingListScreenState extends State<MeetingListScreen> {
     );
   }
 
-  Widget _buildMeetingCard(MeetingModel meeting, UserModel currentUser) {
+  Widget _buildMeetingCard(MeetingModel meeting, UserModel currentUser, [double scale = 1.0]) {
+    // Responsive sizes
+    final padding = (12 * scale).clamp(10.0, 16.0);
+    final iconBoxSize = (44 * scale).clamp(38.0, 52.0);
+    final iconSize = (22 * scale).clamp(18.0, 26.0);
+    final titleFontSize = (15 * scale).clamp(13.0, 17.0);
+    final smallFontSize = (12 * scale).clamp(10.0, 14.0);
+    final smallIconSize = (13 * scale).clamp(11.0, 15.0);
+    
     return GestureDetector(
       onTap: () => _showMeetingDetails(meeting),
       child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(padding),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.04),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
+              blurRadius: 18,
+              offset: const Offset(0, 10),
             ),
           ],
         ),
@@ -373,82 +429,94 @@ class _MeetingListScreenState extends State<MeetingListScreen> {
           children: [
             // 1. Icon Box
             Container(
-              width: 48,
-              height: 48,
+              width: iconBoxSize,
+              height: iconBoxSize,
               decoration: BoxDecoration(
-                color: const Color(0xFFEBEBF0), // Light greyish background from image
-                borderRadius: BorderRadius.circular(12),
+                color: const Color(0xFFF2F4F7),
+                borderRadius: BorderRadius.circular(16),
               ),
-              child: const Icon(
-                Icons.videocam_rounded, // Assuming video meetings based on image
-                color: Color(0xFF2C1B47), // Dark purple/indigo
-                size: 24,
+              child: Icon(
+                Icons.videocam_rounded,
+                color: const Color(0xFF344054),
+                size: iconSize,
               ),
             ),
             
-            const SizedBox(width: 12),
+            SizedBox(width: 10 * scale),
             
             // 2. Info Column
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Title
-                  Text(
-                    meeting.title,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF1A1A1A),
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 6),
-                  
-                  // Time Row
+                  // Title row with status badge
                   Row(
                     children: [
-                      const Icon(Icons.access_time_rounded, size: 14, color: Colors.grey),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${DateFormat('HH:mm').format(meeting.startTime)} - ${DateFormat('HH:mm').format(meeting.endTime)} • ${DateFormat('dd/MM').format(meeting.startTime)}',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  
-                  const SizedBox(height: 4),
-                  
-                  // Location & People Row
-                  Row(
-                    children: [
-                      const Icon(Icons.location_on_outlined, size: 14, color: Colors.grey),
-                      const SizedBox(width: 4),
                       Expanded(
                         child: Text(
-                          meeting.locationType == MeetingLocationType.virtual
-                              ? 'Online'
-                              : (meeting.physicalLocation ?? 'Chưa có địa điểm'),
+                          meeting.title,
                           style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey.shade600,
+                            fontSize: titleFontSize,
+                            fontWeight: FontWeight.w700,
+                            color: _textPrimary,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      const Icon(Icons.people_outline_rounded, size: 14, color: Colors.grey),
-                      const SizedBox(width: 4),
+                      SizedBox(width: 6 * scale),
+                      _buildStatusBadge(meeting, scale),
+                    ],
+                  ),
+                  SizedBox(height: 5 * scale),
+                  
+                  // Time Row
+                  Row(
+                    children: [
+                      Icon(Icons.access_time_rounded, size: smallIconSize, color: _textSecondary),
+                      SizedBox(width: 4 * scale),
+                      Flexible(
+                        child: Text(
+                          '${DateFormat('HH:mm').format(meeting.startTime)} - ${DateFormat('HH:mm').format(meeting.endTime)} • ${DateFormat('dd/MM').format(meeting.startTime)}',
+                          style: TextStyle(
+                            fontSize: smallFontSize,
+                            color: _textSecondary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  
+                  SizedBox(height: 3 * scale),
+                  
+                  // Location & People Row
+                  Row(
+                    children: [
+                      Icon(Icons.location_on_outlined, size: smallIconSize, color: _textSecondary),
+                      SizedBox(width: 4 * scale),
+                      Flexible(
+                        child: Text(
+                          meeting.locationType == MeetingLocationType.virtual
+                              ? 'Online'
+                              : (meeting.physicalLocation ?? 'P...'),
+                          style: TextStyle(
+                            fontSize: smallFontSize,
+                            color: _textSecondary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      SizedBox(width: 6 * scale),
+                      Icon(Icons.people_outline_rounded, size: smallIconSize, color: _textSecondary),
+                      SizedBox(width: 4 * scale),
                       Text(
                         '${meeting.participants.length} người',
                         style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey.shade600,
+                          fontSize: smallFontSize,
+                          color: _textSecondary,
                         ),
                       ),
                     ],
@@ -456,9 +524,6 @@ class _MeetingListScreenState extends State<MeetingListScreen> {
                 ],
               ),
             ),
-            
-            // 3. Status Chip
-            _buildStatusBadge(meeting),
           ],
         ),
       ),
@@ -466,24 +531,30 @@ class _MeetingListScreenState extends State<MeetingListScreen> {
   }
 
 
-  Widget _buildStatusBadge(MeetingModel meeting) {
+  Widget _buildStatusBadge(MeetingModel meeting, [double scale = 1.0]) {
     final now = DateTime.now();
     final isPast = meeting.endTime.isBefore(now);
+    
+    // Responsive sizes
+    final hPadding = (8 * scale).clamp(6.0, 12.0);
+    final vPadding = (4 * scale).clamp(3.0, 6.0);
+    final fontSize = (10 * scale).clamp(9.0, 12.0);
     
     // If meeting has passed and is approved, treat as completed
     if (isPast && meeting.status == MeetingStatus.approved) {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: EdgeInsets.symmetric(horizontal: hPadding, vertical: vPadding),
         decoration: BoxDecoration(
-          color: const Color(0xFFEBEBF0),
-          borderRadius: BorderRadius.circular(20),
+          color: const Color(0xFFF2F4F7),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: _chipBorder, width: 1),
         ),
-        child: const Text(
+        child: Text(
           'Hoàn thành',
           style: TextStyle(
-            fontSize: 11,
+            fontSize: fontSize,
             fontWeight: FontWeight.w600,
-            color: Color(0xFF2C1B47),
+            color: const Color(0xFF344054),
           ),
         ),
       );
@@ -492,27 +563,33 @@ class _MeetingListScreenState extends State<MeetingListScreen> {
     // If meeting is completed status
     if (meeting.status == MeetingStatus.completed) {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: EdgeInsets.symmetric(horizontal: hPadding, vertical: vPadding),
         decoration: BoxDecoration(
-          color: const Color(0xFFEBEBF0),
-          borderRadius: BorderRadius.circular(20),
+          color: const Color(0xFFF2F4F7),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: _chipBorder, width: 1),
         ),
-        child: const Text(
+        child: Text(
           'Hoàn thành',
           style: TextStyle(
-            fontSize: 11,
+            fontSize: fontSize,
             fontWeight: FontWeight.w600,
-            color: Color(0xFF2C1B47),
+            color: const Color(0xFF344054),
           ),
         ),
       );
     }
     
     // Otherwise show status-based badge
-    return _buildStatusBadgeOnly(meeting.status);
+    return _buildStatusBadgeOnly(meeting.status, scale);
   }
 
-  Widget _buildStatusBadgeOnly(MeetingStatus status) {
+  Widget _buildStatusBadgeOnly(MeetingStatus status, [double scale = 1.0]) {
+     // Responsive sizes
+     final hPadding = (8 * scale).clamp(6.0, 12.0);
+     final vPadding = (4 * scale).clamp(3.0, 6.0);
+     final fontSize = (10 * scale).clamp(9.0, 12.0);
+     
      Color color;
      String text;
      switch (status) {
@@ -522,7 +599,7 @@ class _MeetingListScreenState extends State<MeetingListScreen> {
          break;
        case MeetingStatus.approved:
          color = Colors.green;
-         text = 'Sắp tới'; // Or 'Đã duyệt'
+         text = 'Sắp diễn ra';
          break;
        case MeetingStatus.rejected:
          color = Colors.red;
@@ -532,23 +609,28 @@ class _MeetingListScreenState extends State<MeetingListScreen> {
          color = Colors.grey;
          text = 'Đã hủy';
          break;
-       default:
+       case MeetingStatus.completed:
          color = Colors.blue;
-         text = 'Mới';
+         text = 'Hoàn thành';
+         break;
+       case MeetingStatus.expired:
+         color = Colors.grey[600]!;
+         text = 'Hết hạn';
+         break;
      }
      
      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: EdgeInsets.symmetric(horizontal: hPadding, vertical: vPadding),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(20),
+          color: color.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(999),
         ),
         child: Text(
           text,
           style: TextStyle(
-            fontSize: 11,
+            fontSize: fontSize,
             fontWeight: FontWeight.w600,
-            color: color.withOpacity(0.8),
+            color: color.withOpacity(0.85),
           ),
         ),
       );
@@ -627,6 +709,8 @@ class _MeetingListScreenState extends State<MeetingListScreen> {
         return 'Đã hủy';
       case MeetingStatus.completed:
         return 'Hoàn thành';
+      case MeetingStatus.expired:
+        return 'Hết hạn';
     }
   }
 
@@ -759,6 +843,8 @@ class _MeetingListScreenState extends State<MeetingListScreen> {
         return Colors.grey;
       case MeetingStatus.completed:
         return const Color(0xFF2E7BE9);
+      case MeetingStatus.expired:
+        return Colors.grey[600]!;
     }
   }
 
@@ -800,6 +886,10 @@ class _MeetingListScreenState extends State<MeetingListScreen> {
       case MeetingStatus.completed:
         text = 'Hoàn thành';
         icon = Icons.done_all;
+        break;
+      case MeetingStatus.expired:
+        text = 'Hết hạn';
+        icon = Icons.timer_off;
         break;
     }
 
@@ -975,6 +1065,11 @@ class _MeetingListScreenState extends State<MeetingListScreen> {
         color = Colors.blue;
         text = 'Đã hoàn thành';
         icon = Icons.done_all;
+        break;
+      case MeetingStatus.expired:
+        color = Colors.grey[600]!;
+        text = 'Hết hạn';
+        icon = Icons.timer_off;
         break;
     }
 

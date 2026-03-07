@@ -85,10 +85,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                               height: 112,
                               fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) =>
-                                  Icon(Icons.person, size: 56),
+                                  const Icon(Icons.person, size: 56),
                             ),
                           )
-                        : Icon(Icons.person, size: 56),
+                        : const Icon(Icons.person, size: 56),
                   ),
                   Positioned(
                     bottom: 0,

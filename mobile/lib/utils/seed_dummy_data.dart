@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 Future<void> seedDummyData() async {
   final firestore = FirebaseFirestore.instance;
-  final meetingId = 'test-meeting-001';
+  const meetingId = 'test-meeting-001';
 
   // 1. Meeting Minutes
   await firestore.collection('meeting_minutes').add({

@@ -14,8 +14,8 @@ class FileProvider extends ChangeNotifier {
 
   List<FileModel> _files = [];
   List<FolderModel> _folders = [];
-  List<UploadProgress> _uploadProgresses = [];
-  Map<String, File> _downloadedFiles = {};
+  final List<UploadProgress> _uploadProgresses = [];
+  final Map<String, File> _downloadedFiles = {};
 
   bool _isLoading = false;
   String _error = '';
@@ -654,8 +654,4 @@ class FileProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  @override
-  void dispose() {
-    super.dispose();
-  }
 }

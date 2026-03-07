@@ -23,11 +23,13 @@ class OrganizationProvider with ChangeNotifier {
 
   // Loading states
   bool _isLoading = false;
+  bool _isLoadingTeams = false;
   String? _error;
 
   // Cache
   bool _departmentsLoaded = false;
   DateTime? _lastLoadTime;
+  String? _lastTeamsDepartmentId; // Cache key for teams
 
   // Getters
   List<DepartmentModel> get departments => _departments;
@@ -37,6 +39,7 @@ class OrganizationProvider with ChangeNotifier {
   List<UserModel> get departmentUsers => _departmentUsers;
   List<UserModel> get teamUsers => _teamUsers;
   bool get isLoading => _isLoading;
+  bool get isLoadingTeams => _isLoadingTeams;
   String? get error => _error;
 
   /// Load tất cả departments với cache
@@ -201,79 +204,68 @@ class OrganizationProvider with ChangeNotifier {
     }
   }
 
-  /// Load teams theo department
+  /// Dùng cache sẵn có từ màn hình – không bật loading spinner
+  void setAvailableTeamsFromCache(List<TeamModel> cachedTeams, String departmentId) {
+    _availableTeams = cachedTeams;
+    _lastTeamsDepartmentId = departmentId;
+    _isLoadingTeams = false;
+    notifyListeners();
+  }
+
+  /// Load teams theo department từ Firestore teams collection
   Future<void> loadTeamsByDepartment(String departmentId) async {
+    // Skip if already loaded for this department (but NOT if only fallback general team)
+    if (_lastTeamsDepartmentId == departmentId && _availableTeams.length > 1) {
+      return;
+    }
+
     try {
-      _isLoading = true;
+      _isLoadingTeams = true;
       _error = null;
       notifyListeners();
 
-      // Load teams từ user data (vì hiện tại teams được lưu trong user.teamIds)
-      QuerySnapshot userSnapshot = await _firestore
-          .collection('users')
+      QuerySnapshot snapshot = await _firestore
+          .collection('teams')
           .where('departmentId', isEqualTo: departmentId)
+          .where('isActive', isEqualTo: true)
+          // TODO: add .orderBy('order') once Firestore composite index is ready
           .get();
 
-      Set<String> teamNamesSet = {};
-      Map<String, List<String>> teamMembers = {};
-
-      for (var doc in userSnapshot.docs) {
-        final userData = doc.data() as Map<String, dynamic>;
-        final teamNames = List<String>.from(userData['teamNames'] ?? []);
-        final userId = doc.id;
-        final userName = userData['displayName'] ?? 'Unknown';
-
-        for (String teamName in teamNames) {
-          teamNamesSet.add(teamName);
-          if (!teamMembers.containsKey(teamName)) {
-            teamMembers[teamName] = [];
-          }
-          teamMembers[teamName]!.add(userId);
-        }
-      }
-
-      // Tạo TeamModel từ data
-      _teams = teamNamesSet.map((teamName) {
-        List<String> memberIds = teamMembers[teamName] ?? [];
-
-        // Tìm team leader
-        String? leaderId;
-        String? leaderName;
-        for (String memberId in memberIds) {
-          var userDoc =
-              userSnapshot.docs.firstWhere((doc) => doc.id == memberId);
-          final userData = userDoc.data() as Map<String, dynamic>;
-          if (userData['role'] == 'manager') {
-            leaderId = memberId;
-            leaderName = userData['displayName'];
-            break;
-          }
-        }
-
-        return TeamModel(
-          id: '${departmentId}_$teamName',
-          name: teamName,
-          description: 'Team $teamName thuộc $departmentId',
-          departmentId: departmentId,
-          departmentName: departmentId,
-          leaderId: leaderId,
-          leaderName: leaderName,
-          memberIds: memberIds,
-          memberNames: [], // Sẽ được load sau nếu cần
-          isActive: true,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-        );
+      _teams = snapshot.docs.map((doc) {
+        return TeamModel.fromMap(
+            doc.data() as Map<String, dynamic>, doc.id);
       }).toList();
 
-      _availableTeams = _teams.where((team) => team.isActive).toList();
+      // Sort: order first, then alphabetically
+      _teams.sort((a, b) {
+        if (a.order != b.order) return a.order.compareTo(b.order);
+        return a.name.compareTo(b.name);
+      });
+
+      _availableTeams = _teams;
+      _lastTeamsDepartmentId = departmentId;
 
       print('✅ Loaded ${_teams.length} teams for department: $departmentId');
     } catch (e) {
       _error = 'Lỗi tải danh sách team: $e';
       print('❌ Error loading teams: $e');
+
+      // Fallback: tạo default team nếu không load được
+      _teams = [
+        TeamModel(
+          id: '${departmentId}__general',
+          name: 'Chung (Chưa phân team)',
+          description: 'Team mặc định',
+          departmentId: departmentId,
+          departmentName: departmentId,
+          isActive: true,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+      ];
+      _availableTeams = _teams;
     } finally {
-      _isLoading = false;
+      _isLoadingTeams = false;
       notifyListeners();
     }
   }
@@ -328,19 +320,10 @@ class OrganizationProvider with ChangeNotifier {
       _error = null;
       notifyListeners();
 
-      // Parse teamId để lấy department và team name
-      final parts = teamId.split('_');
-      if (parts.length < 2) {
-        throw Exception('Invalid team ID format');
-      }
-
-      final departmentId = parts[0];
-      final teamName = parts.sublist(1).join('_');
-
+      // Query users by teamId field
       QuerySnapshot snapshot = await _firestore
           .collection('users')
-          .where('departmentId', isEqualTo: departmentId)
-          .where('teamNames', arrayContains: teamName)
+          .where('teamId', isEqualTo: teamId)
           .where('isActive', isEqualTo: true)
           .get();
 
@@ -348,7 +331,7 @@ class OrganizationProvider with ChangeNotifier {
         return UserModel.fromMap(doc.data() as Map<String, dynamic>, doc.id);
       }).toList();
 
-      print('✅ Loaded ${_teamUsers.length} users for team: $teamName');
+      print('✅ Loaded ${_teamUsers.length} users for team: $teamId');
     } catch (e) {
       _error = 'Lỗi tải danh sách thành viên team: $e';
       print('❌ Error loading team users: $e');
@@ -420,6 +403,7 @@ class OrganizationProvider with ChangeNotifier {
     _availableTeams.clear();
     _departmentUsers.clear();
     _teamUsers.clear();
+    _lastTeamsDepartmentId = null;
     _error = null;
     notifyListeners();
   }
@@ -440,5 +424,15 @@ class OrganizationProvider with ChangeNotifier {
     } catch (e) {
       return null;
     }
+  }
+
+  /// Get display name for a teamId (for UI fallback)
+  String getTeamDisplayName(String? teamId) {
+    if (teamId == null || teamId.isEmpty) return 'Chưa phân team';
+    final team = getTeamById(teamId);
+    if (team != null) return team.name;
+    // Fallback: if teamId ends with __general, show default name
+    if (teamId.endsWith('__general')) return 'Chung (Chưa phân team)';
+    return teamId;
   }
 }

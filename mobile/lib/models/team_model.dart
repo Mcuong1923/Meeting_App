@@ -8,12 +8,17 @@ class TeamModel {
   final String departmentName;
   final String? leaderId;
   final String? leaderName;
+  final List<String> managerIds;
   final List<String> memberIds;
   final List<String> memberNames;
   final bool isActive;
   final DateTime createdAt;
   final DateTime updatedAt;
   final Map<String, dynamic>? additionalData;
+  final int order;
+
+  /// Whether this is the default "general" team for a department
+  bool get isGeneralTeam => id.endsWith('__general');
 
   TeamModel({
     required this.id,
@@ -23,12 +28,14 @@ class TeamModel {
     required this.departmentName,
     this.leaderId,
     this.leaderName,
+    this.managerIds = const [],
     this.memberIds = const [],
     this.memberNames = const [],
     this.isActive = true,
     required this.createdAt,
     required this.updatedAt,
     this.additionalData,
+    this.order = 0,
   });
 
   factory TeamModel.fromMap(Map<String, dynamic> map, String id) {
@@ -40,6 +47,7 @@ class TeamModel {
       departmentName: map['departmentName'] ?? '',
       leaderId: map['leaderId'],
       leaderName: map['leaderName'],
+      managerIds: List<String>.from(map['managerIds'] ?? []),
       memberIds: List<String>.from(map['memberIds'] ?? []),
       memberNames: List<String>.from(map['memberNames'] ?? []),
       isActive: map['isActive'] ?? true,
@@ -50,6 +58,7 @@ class TeamModel {
           ? (map['updatedAt'] as Timestamp).toDate()
           : DateTime.now(),
       additionalData: map['additionalData'] as Map<String, dynamic>?,
+      order: map['order'] ?? 0,
     );
   }
 
@@ -61,6 +70,7 @@ class TeamModel {
       'departmentName': departmentName,
       'leaderId': leaderId,
       'leaderName': leaderName,
+      'managerIds': managerIds,
       'memberIds': memberIds,
       'memberNames': memberNames,
       'isActive': isActive,
@@ -78,6 +88,7 @@ class TeamModel {
     String? departmentName,
     String? leaderId,
     String? leaderName,
+    List<String>? managerIds,
     List<String>? memberIds,
     List<String>? memberNames,
     bool? isActive,
@@ -93,6 +104,7 @@ class TeamModel {
       departmentName: departmentName ?? this.departmentName,
       leaderId: leaderId ?? this.leaderId,
       leaderName: leaderName ?? this.leaderName,
+      managerIds: managerIds ?? this.managerIds,
       memberIds: memberIds ?? this.memberIds,
       memberNames: memberNames ?? this.memberNames,
       isActive: isActive ?? this.isActive,

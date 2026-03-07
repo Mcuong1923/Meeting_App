@@ -18,10 +18,15 @@ class UserModel {
   final DateTime? lastLoginAt;
   final bool isActive;
   final Map<String, dynamic>? additionalData;
-  final UserRole? pendingRole;
-  final String? pendingDepartment;
+  final UserRole? requestedRole;
+  final String? requestedDepartmentId;
+  final String? requestedTeamId;
+  final String? requestedRoleReason;
   final DateTime? requestedAt;
   final bool isRoleApproved;
+  final String? teamId;
+  final String? status; // 'pending', 'active', 'disabled'
+  final String accountType; // 'internal', 'external'
 
   UserModel({
     required this.id,
@@ -39,10 +44,15 @@ class UserModel {
     this.lastLoginAt,
     this.isActive = true,
     this.additionalData,
-    this.pendingRole,
-    this.pendingDepartment,
+    this.requestedRole,
+    this.requestedDepartmentId,
+    this.requestedTeamId,
+    this.requestedRoleReason,
     this.requestedAt,
     this.isRoleApproved = true,
+    this.teamId,
+    this.status,
+    this.accountType = 'internal',
   });
 
   factory UserModel.fromMap(Map<String, dynamic> map, String id) {
@@ -63,15 +73,17 @@ class UserModel {
         lastLoginAt: _parseTimestamp(map['lastLoginAt']),
         isActive: map['isActive'] == true,
         additionalData: map['additionalData'] as Map<String, dynamic>?,
-        pendingRole: map['pendingRole'] != null
-            ? UserRole.values.firstWhere(
-                (role) => role.toString() == 'UserRole.${map['pendingRole']}',
-                orElse: () => UserRole.guest,
-              )
-            : null,
-        pendingDepartment: map['pendingDepartment']?.toString(),
+        requestedRole: map['requestedRole'] != null
+            ? _parseUserRole(map['requestedRole'])
+            : (map['pendingRole'] != null ? _parseUserRole(map['pendingRole']) : null),
+        requestedDepartmentId: map['requestedDepartmentId']?.toString() ?? map['pendingDepartment']?.toString(),
+        requestedTeamId: map['requestedTeamId']?.toString(),
+        requestedRoleReason: map['requestedRoleReason']?.toString(),
         requestedAt: _parseTimestamp(map['requestedAt']),
         isRoleApproved: map['isRoleApproved'] == true,
+        teamId: map['teamId']?.toString() ?? (_parseStringList(map['teamIds']).isNotEmpty ? _parseStringList(map['teamIds']).first : null),
+        accountType: map['accountType']?.toString() ?? ((map['email']?.toString() ?? '').toLowerCase().endsWith('@company.com') ? 'internal' : 'external'),
+        status: map['status']?.toString() ?? (map['isActive'] == true ? 'active' : 'active'),
       );
     } catch (e) {
       print('Error parsing UserModel for ID $id: $e');
@@ -84,6 +96,8 @@ class UserModel {
         createdAt: DateTime.now(),
         isActive: true,
         isRoleApproved: true,
+        accountType: 'external',
+        status: 'active',
       );
     }
   }
@@ -158,10 +172,15 @@ class UserModel {
           lastLoginAt != null ? Timestamp.fromDate(lastLoginAt!) : null,
       'isActive': isActive,
       'additionalData': additionalData,
-      'pendingRole': pendingRole?.toString().split('.').last,
-      'pendingDepartment': pendingDepartment,
+      'requestedRole': requestedRole?.toString().split('.').last,
+      'requestedDepartmentId': requestedDepartmentId,
+      'requestedTeamId': requestedTeamId,
+      'requestedRoleReason': requestedRoleReason,
       'requestedAt': requestedAt != null ? Timestamp.fromDate(requestedAt!) : null,
       'isRoleApproved': isRoleApproved,
+      'teamId': teamId,
+      'status': status,
+      'accountType': accountType,
     };
   }
 
@@ -181,10 +200,15 @@ class UserModel {
     DateTime? lastLoginAt,
     bool? isActive,
     Map<String, dynamic>? additionalData,
-    UserRole? pendingRole,
-    String? pendingDepartment,
+    UserRole? requestedRole,
+    String? requestedDepartmentId,
+    String? requestedTeamId,
+    String? requestedRoleReason,
     DateTime? requestedAt,
     bool? isRoleApproved,
+    String? teamId,
+    String? status,
+    String? accountType,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -202,10 +226,15 @@ class UserModel {
       lastLoginAt: lastLoginAt ?? this.lastLoginAt,
       isActive: isActive ?? this.isActive,
       additionalData: additionalData ?? this.additionalData,
-      pendingRole: pendingRole ?? this.pendingRole,
-      pendingDepartment: pendingDepartment ?? this.pendingDepartment,
+      requestedRole: requestedRole ?? this.requestedRole,
+      requestedDepartmentId: requestedDepartmentId ?? this.requestedDepartmentId,
+      requestedTeamId: requestedTeamId ?? this.requestedTeamId,
+      requestedRoleReason: requestedRoleReason ?? this.requestedRoleReason,
       requestedAt: requestedAt ?? this.requestedAt,
       isRoleApproved: isRoleApproved ?? this.isRoleApproved,
+      teamId: teamId ?? this.teamId,
+      status: status ?? this.status,
+      accountType: accountType ?? this.accountType,
     );
   }
 

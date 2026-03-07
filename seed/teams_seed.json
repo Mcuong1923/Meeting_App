@@ -1,0 +1,249 @@
+{
+    "departments": [
+        {
+            "departmentId": "Công nghệ thông tin",
+            "teams": [
+                {
+                    "code": "frontend",
+                    "name": "Frontend",
+                    "order": 1
+                },
+                {
+                    "code": "backend",
+                    "name": "Backend",
+                    "order": 2
+                },
+                {
+                    "code": "mobile",
+                    "name": "Mobile",
+                    "order": 3
+                },
+                {
+                    "code": "devops",
+                    "name": "DevOps",
+                    "order": 4
+                },
+                {
+                    "code": "qa",
+                    "name": "QA/Tester",
+                    "order": 5
+                },
+                {
+                    "code": "general",
+                    "name": "Chung (Chưa phân team)",
+                    "order": 999
+                }
+            ]
+        },
+        {
+            "departmentId": "Nhân sự",
+            "teams": [
+                {
+                    "code": "tuyen_dung",
+                    "name": "Tuyển dụng",
+                    "order": 1
+                },
+                {
+                    "code": "cnb",
+                    "name": "C&B",
+                    "order": 2
+                },
+                {
+                    "code": "hanh_chinh",
+                    "name": "Hành chính",
+                    "order": 3
+                },
+                {
+                    "code": "dao_tao",
+                    "name": "Đào tạo",
+                    "order": 4
+                },
+                {
+                    "code": "quan_he_lao_dong",
+                    "name": "Quan hệ lao động",
+                    "order": 5
+                },
+                {
+                    "code": "general",
+                    "name": "Chung (Chưa phân team)",
+                    "order": 999
+                }
+            ]
+        },
+        {
+            "departmentId": "Marketing",
+            "teams": [
+                {
+                    "code": "content",
+                    "name": "Content",
+                    "order": 1
+                },
+                {
+                    "code": "performance",
+                    "name": "Performance",
+                    "order": 2
+                },
+                {
+                    "code": "design",
+                    "name": "Design",
+                    "order": 3
+                },
+                {
+                    "code": "pr_brand",
+                    "name": "PR/Brand",
+                    "order": 4
+                },
+                {
+                    "code": "seo",
+                    "name": "SEO",
+                    "order": 5
+                },
+                {
+                    "code": "general",
+                    "name": "Chung (Chưa phân team)",
+                    "order": 999
+                }
+            ]
+        },
+        {
+            "departmentId": "Kế toán",
+            "teams": [
+                {
+                    "code": "noi_bo",
+                    "name": "Kế toán nội bộ",
+                    "order": 1
+                },
+                {
+                    "code": "thue",
+                    "name": "Thuế",
+                    "order": 2
+                },
+                {
+                    "code": "cong_no",
+                    "name": "Công nợ",
+                    "order": 3
+                },
+                {
+                    "code": "ks_chi",
+                    "name": "Kiểm soát chi phí",
+                    "order": 4
+                },
+                {
+                    "code": "bao_cao",
+                    "name": "Báo cáo tài chính",
+                    "order": 5
+                },
+                {
+                    "code": "general",
+                    "name": "Chung (Chưa phân team)",
+                    "order": 999
+                }
+            ]
+        },
+        {
+            "departmentId": "Kinh doanh",
+            "teams": [
+                {
+                    "code": "b2b",
+                    "name": "Sales B2B",
+                    "order": 1
+                },
+                {
+                    "code": "b2c",
+                    "name": "Sales B2C",
+                    "order": 2
+                },
+                {
+                    "code": "kam",
+                    "name": "Key Account",
+                    "order": 3
+                },
+                {
+                    "code": "pre",
+                    "name": "Presales",
+                    "order": 4
+                },
+                {
+                    "code": "cskh",
+                    "name": "Chăm sóc khách hàng",
+                    "order": 5
+                },
+                {
+                    "code": "general",
+                    "name": "Chung (Chưa phân team)",
+                    "order": 999
+                }
+            ]
+        },
+        {
+            "departmentId": "Vận hành",
+            "teams": [
+                {
+                    "code": "cskh",
+                    "name": "CSKH",
+                    "order": 1
+                },
+                {
+                    "code": "logistics",
+                    "name": "Logistics",
+                    "order": 2
+                },
+                {
+                    "code": "ops",
+                    "name": "Operations",
+                    "order": 3
+                },
+                {
+                    "code": "kho_van",
+                    "name": "Kho vận",
+                    "order": 4
+                },
+                {
+                    "code": "dieu_phoi",
+                    "name": "Điều phối",
+                    "order": 5
+                },
+                {
+                    "code": "general",
+                    "name": "Chung (Chưa phân team)",
+                    "order": 999
+                }
+            ]
+        },
+        {
+            "departmentId": "Khác",
+            "teams": [
+                {
+                    "code": "team_a",
+                    "name": "Team A",
+                    "order": 1
+                },
+                {
+                    "code": "team_b",
+                    "name": "Team B",
+                    "order": 2
+                },
+                {
+                    "code": "team_c",
+                    "name": "Team C",
+                    "order": 3
+                },
+                {
+                    "code": "team_d",
+                    "name": "Team D",
+                    "order": 4
+                },
+                {
+                    "code": "team_e",
+                    "name": "Team E",
+                    "order": 5
+                },
+                {
+                    "code": "general",
+                    "name": "Chung (Chưa phân team)",
+                    "order": 999
+                }
+            ]
+        }
+    ]
+}

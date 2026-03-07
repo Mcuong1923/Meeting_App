@@ -19,12 +19,12 @@ class ThemeProvider extends ChangeNotifier {
           brightness: Brightness.light,
         ),
         primaryColor: _primaryColor,
-        appBarTheme: AppBarTheme(
+        appBarTheme: const AppBarTheme(
           backgroundColor: Colors.white,
           foregroundColor: Colors.black,
           elevation: 0,
           centerTitle: true,
-          titleTextStyle: const TextStyle(
+          titleTextStyle: TextStyle(
             color: Colors.black,
             fontSize: 18,
             fontWeight: FontWeight.w600,
@@ -45,14 +45,14 @@ class ThemeProvider extends ChangeNotifier {
           foregroundColor: Colors.white,
         ),
         switchTheme: SwitchThemeData(
-          thumbColor: MaterialStateProperty.resolveWith((states) {
-            if (states.contains(MaterialState.selected)) {
+          thumbColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
               return _primaryColor;
             }
             return Colors.white;
           }),
-          trackColor: MaterialStateProperty.resolveWith((states) {
-            if (states.contains(MaterialState.selected)) {
+          trackColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
               return _primaryColor.withOpacity(0.3);
             }
             return const Color(0xFFE0E0E0);
@@ -96,14 +96,14 @@ class ThemeProvider extends ChangeNotifier {
           foregroundColor: Colors.white,
         ),
         switchTheme: SwitchThemeData(
-          thumbColor: MaterialStateProperty.resolveWith((states) {
-            if (states.contains(MaterialState.selected)) {
+          thumbColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
               return _primaryColor;
             }
             return Colors.white;
           }),
-          trackColor: MaterialStateProperty.resolveWith((states) {
-            if (states.contains(MaterialState.selected)) {
+          trackColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
               return _primaryColor.withOpacity(0.3);
             }
             return const Color(0xFF39393D);

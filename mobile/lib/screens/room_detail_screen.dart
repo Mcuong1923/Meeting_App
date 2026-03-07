@@ -23,7 +23,10 @@ class _RoomDetailScreenState extends State<RoomDetailScreen>
     super.initState();
     _room = widget.room;
     _tabController = TabController(length: 3, vsync: this);
-    _loadMaintenanceRecords();
+    // Dùng addPostFrameCallback để tránh gọi context.read trước khi widget mounted
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadMaintenanceRecords();
+    });
   }
 
   @override
@@ -33,6 +36,7 @@ class _RoomDetailScreenState extends State<RoomDetailScreen>
   }
 
   void _loadMaintenanceRecords() {
+    if (!mounted) return;
     context.read<RoomProvider>().loadMaintenanceRecords(roomId: _room.id);
   }
 
@@ -161,7 +165,7 @@ class _RoomDetailScreenState extends State<RoomDetailScreen>
                   color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
+                child: const Icon(
                   Icons.meeting_room,
                   color: Colors.white,
                   size: 24,
@@ -236,7 +240,7 @@ class _RoomDetailScreenState extends State<RoomDetailScreen>
               ),
               child: Row(
                 children: [
-                  Icon(Icons.warning, color: Colors.orange, size: 20),
+                  const Icon(Icons.warning, color: Colors.orange, size: 20),
                   const SizedBox(width: 8),
                   Text(
                     'Phòng cần bảo trì',
@@ -418,7 +422,7 @@ class _RoomDetailScreenState extends State<RoomDetailScreen>
                   color: Colors.blue.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
+                child: const Icon(
                   Icons.location_on,
                   color: Colors.blue,
                   size: 24,
@@ -547,7 +551,7 @@ class _RoomDetailScreenState extends State<RoomDetailScreen>
                   color: Colors.purple.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
+                child: const Icon(
                   Icons.qr_code,
                   color: Colors.purple,
                   size: 24,
@@ -1141,6 +1145,50 @@ class _RoomDetailScreenState extends State<RoomDetailScreen>
   Widget _buildMaintenanceTab() {
     return Consumer<RoomProvider>(
       builder: (context, roomProvider, child) {
+        // Hiển thị lỗi inline trong tab thay vì crash toàn màn hình
+        if (roomProvider.maintenanceError.isNotEmpty) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.warning_amber_rounded, size: 56, color: Colors.orange.shade400),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Không thể tải lịch sử bảo trì',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade700,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Vui lòng thử lại sau',
+                    style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton.icon(
+                    onPressed: _loadMaintenanceRecords,
+                    icon: const Icon(Icons.refresh, size: 18),
+                    label: const Text('Thử lại'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue.shade600,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
         final maintenanceRecords = roomProvider.maintenanceRecords
             .where((record) => record.roomId == _room.id)
             .toList();

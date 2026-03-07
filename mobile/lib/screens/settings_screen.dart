@@ -454,7 +454,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Container(
       width: 18,
       height: 18,
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: Colors.white,
         shape: BoxShape.circle,
       ),

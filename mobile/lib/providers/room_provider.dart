@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:async';
 import '../models/room_model.dart';
 import '../models/user_model.dart';
 
@@ -11,11 +12,19 @@ class RoomProvider extends ChangeNotifier {
   bool _isLoading = false;
   String _error = '';
 
+  // Real-time occupancy subscription
+  StreamSubscription<QuerySnapshot>? _occupancySubscription;
+  Timer? _occupancyTimer; // Timer để re-check định kỳ
+
   // Getters
   List<RoomModel> get rooms => _rooms;
   List<MaintenanceRecord> get maintenanceRecords => _maintenanceRecords;
   bool get isLoading => _isLoading;
   String get error => _error;
+
+  // Lỗi riêng cho maintenance (không ảnh hưởng các tab khác)
+  String _maintenanceError = '';
+  String get maintenanceError => _maintenanceError;
 
   // Filtered rooms
   List<RoomModel> get availableRooms =>
@@ -29,7 +38,7 @@ class RoomProvider extends ChangeNotifier {
   List<RoomModel> get roomsNeedMaintenance =>
       _rooms.where((room) => room.needsMaintenance).toList();
 
-  // Statistics
+  // Statistics (based on operational status - NOT dynamic occupancy)
   int get totalRooms => _rooms.length;
   int get availableCount => availableRooms.length;
   int get occupiedCount => occupiedRooms.length;
@@ -37,6 +46,227 @@ class RoomProvider extends ChangeNotifier {
   int get disabledCount => disabledRooms.length;
   double get occupancyRate =>
       totalRooms > 0 ? (occupiedCount / totalRooms) * 100 : 0;
+
+  // ==================== Bookable Rooms (for meeting creation) ====================
+
+  /// Rooms that can be booked for meetings
+  /// Only rooms with operational status = available (not maintenance/disabled)
+  List<RoomModel> get bookableRooms =>
+      _rooms.where((room) => room.status == RoomStatus.available).toList();
+
+  int get bookableCount => bookableRooms.length;
+
+  // ==================== Dynamic Occupancy (based on current meetings) ====================
+
+  Map<String, bool> _currentlyOccupied = {};
+
+  /// Số phòng THỰC SỰ đang có meeting diễn ra RIGHT NOW (real-time)
+  int get currentlyOccupiedCount => _currentlyOccupied.length;
+
+  /// Check if a room is currently occupied based on ongoing meetings
+  bool isRoomCurrentlyOccupied(String roomId) {
+    return _currentlyOccupied[roomId] ?? false;
+  }
+
+  /// Mở Firestore REAL-TIME stream lắng nghe meetings đang diễn ra.
+  /// Tự động cập nhật _currentlyOccupied mỗi khi có meeting thay đổi.
+  void subscribeOccupancy() {
+    _occupancySubscription?.cancel();
+    _occupancyTimer?.cancel();
+
+    final now = DateTime.now();
+
+    // Lắng nghe meetings approved/pending có startTime <= now
+    // Firestore không hỗ trợ range query 2 field, nên filter endTime ở client
+    _occupancySubscription = _firestore
+        .collection('meetings')
+        .where('status', whereIn: ['approved', 'pending'])
+        .where('startTime', isLessThanOrEqualTo: Timestamp.fromDate(now))
+        .snapshots()
+        .listen((snapshot) {
+      final nowCheck = DateTime.now();
+      final Map<String, bool> newOccupancy = {};
+
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        final roomId = data['roomId'] as String?;
+        if (roomId == null || roomId.isEmpty) continue;
+
+        final endTs = data['endTime'];
+        if (endTs == null) continue;
+        final endTime = (endTs as Timestamp).toDate();
+
+        // Meeting đang diễn ra: startTime <= now < endTime
+        if (endTime.isAfter(nowCheck)) {
+          newOccupancy[roomId] = true;
+          print('[ROOM][REALTIME] Room $roomId OCCUPIED by meeting ${doc.id}');
+        }
+      }
+
+      _currentlyOccupied = newOccupancy;
+      print('[ROOM][REALTIME] Currently occupied: ${_currentlyOccupied.length} rooms');
+      notifyListeners();
+    }, onError: (e) {
+      print('[ROOM][REALTIME] Stream error: $e');
+    });
+
+    // Timer re-subscribe mỗi 60 giây để cập nhật startTime <= now mới
+    // (Firestore stream không trigger khi thời gian trôi qua, chỉ khi data đổi)
+    _occupancyTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+      subscribeOccupancy();
+    });
+  }
+
+  void unsubscribeOccupancy() {
+    _occupancySubscription?.cancel();
+    _occupancySubscription = null;
+    _occupancyTimer?.cancel();
+    _occupancyTimer = null;
+  }
+
+  @override
+  void dispose() {
+    unsubscribeOccupancy();
+    super.dispose();
+  }
+
+  /// Load current occupancy status for all rooms (one-shot, legacy)
+  Future<void> loadCurrentOccupancy() async {
+    try {
+      final now = DateTime.now();
+      QuerySnapshot snapshot = await _firestore
+          .collection('meetings')
+          .where('status', whereIn: ['approved', 'pending'])
+          .get();
+
+      Map<String, bool> newOccupancy = {};
+      for (var doc in snapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        final roomId = data['roomId'];
+        if (roomId == null) continue;
+        final startTime = (data['startTime'] as Timestamp).toDate();
+        final endTime = (data['endTime'] as Timestamp).toDate();
+        if (startTime.isBefore(now) && endTime.isAfter(now)) {
+          newOccupancy[roomId] = true;
+        }
+      }
+      _currentlyOccupied = newOccupancy;
+      notifyListeners();
+    } catch (e) {
+      print('[ROOM][OCCUPANCY] ERROR: $e');
+    }
+  }
+
+  /// Get rooms with their current occupancy status
+  List<Map<String, dynamic>> get roomsWithOccupancy {
+    return _rooms.map((room) {
+      bool isOccupied = isRoomCurrentlyOccupied(room.id);
+      return {
+        'room': room,
+        'isCurrentlyOccupied': isOccupied,
+        'displayStatus': isOccupied ? 'Đang sử dụng' : _getStatusDisplayText(room.status),
+      };
+    }).toList();
+  }
+
+  String _getStatusDisplayText(RoomStatus status) {
+    switch (status) {
+      case RoomStatus.available:
+        return 'Sẵn sàng';
+      case RoomStatus.occupied:
+        return 'Đang sử dụng'; // Legacy, should compute dynamically
+      case RoomStatus.maintenance:
+        return 'Bảo trì';
+      case RoomStatus.disabled:
+        return 'Tạm ngưng';
+    }
+  }
+
+  // ==================== Usage Statistics (Time-based) ====================
+
+  /// Calculate usage rate for today
+  /// Formula: usedMinutes / totalAvailableMinutes
+  Future<Map<String, dynamic>> calculateTodayUsageStats() async {
+    try {
+      final now = DateTime.now();
+      final todayStart = DateTime(now.year, now.month, now.day);
+      final todayEnd = todayStart.add(const Duration(days: 1));
+
+      print('[ROOM][STATS] Calculating usage for $todayStart to $todayEnd');
+
+      // Get all bookable rooms
+      int bookableRoomCount = bookableRooms.length;
+      if (bookableRoomCount == 0) {
+        return {
+          'usageRate': 0.0,
+          'totalMinutes': 0,
+          'usedMinutes': 0,
+          'meetingCount': 0,
+          'bookableRooms': 0,
+        };
+      }
+
+      // Total available minutes = bookable rooms * 24 hours * 60 minutes
+      // (Or use business hours: 8 hours * 60 = 480 minutes per room)
+      const int businessHoursPerDay = 10; // 8:00 - 18:00
+      int totalAvailableMinutes = bookableRoomCount * businessHoursPerDay * 60;
+
+      // Query today's meetings
+      QuerySnapshot snapshot = await _firestore
+          .collection('meetings')
+          .where('startTime', isGreaterThanOrEqualTo: Timestamp.fromDate(todayStart))
+          .where('startTime', isLessThan: Timestamp.fromDate(todayEnd))
+          .where('status', whereIn: ['approved', 'pending'])
+          .get();
+
+      int usedMinutes = 0;
+      int meetingCount = 0;
+
+      for (var doc in snapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        final roomId = data['roomId'];
+        if (roomId == null) continue; // Skip meetings without room
+
+        final startTime = (data['startTime'] as Timestamp).toDate();
+        final endTime = (data['endTime'] as Timestamp).toDate();
+
+        // Clamp to today's range
+        final clampedStart = startTime.isBefore(todayStart) ? todayStart : startTime;
+        final clampedEnd = endTime.isAfter(todayEnd) ? todayEnd : endTime;
+
+        int duration = clampedEnd.difference(clampedStart).inMinutes;
+        if (duration > 0) {
+          usedMinutes += duration;
+          meetingCount++;
+        }
+      }
+
+      double usageRate = totalAvailableMinutes > 0
+          ? (usedMinutes / totalAvailableMinutes) * 100
+          : 0.0;
+
+      print('[ROOM][STATS] Result: usageRate=${usageRate.toStringAsFixed(1)}% '
+          'usedMinutes=$usedMinutes/$totalAvailableMinutes meetingCount=$meetingCount');
+
+      return {
+        'usageRate': usageRate,
+        'totalMinutes': totalAvailableMinutes,
+        'usedMinutes': usedMinutes,
+        'meetingCount': meetingCount,
+        'bookableRooms': bookableRoomCount,
+      };
+    } catch (e) {
+      print('[ROOM][STATS] ERROR: $e');
+      return {
+        'usageRate': 0.0,
+        'totalMinutes': 0,
+        'usedMinutes': 0,
+        'meetingCount': 0,
+        'bookableRooms': 0,
+        'error': e.toString(),
+      };
+    }
+  }
 
   /// Tải tất cả phòng họp
   Future<void> loadRooms() async {
@@ -47,9 +277,15 @@ class RoomProvider extends ChangeNotifier {
       QuerySnapshot snapshot =
           await _firestore.collection('rooms').orderBy('name').get();
 
-      _rooms = snapshot.docs
-          .map((doc) => RoomModel.fromMap(doc.data() as Map<String, dynamic>))
-          .toList();
+      // Always use Firestore document ID as canonical roomId
+      _rooms = snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return RoomModel.fromMap({
+          ...data,
+          // Force id to be the Firestore docId to avoid mismatches
+          'id': doc.id,
+        });
+      }).toList();
 
       notifyListeners();
     } catch (e) {
@@ -61,24 +297,37 @@ class RoomProvider extends ChangeNotifier {
 
   /// Tải lịch sử bảo trì
   Future<void> loadMaintenanceRecords({String? roomId}) async {
+    // Reset maintenance error trước khi tải
+    _maintenanceError = '';
     try {
       Query query = _firestore.collection('maintenance_records');
 
       if (roomId != null) {
         query = query.where('roomId', isEqualTo: roomId);
+        // Không dùng orderBy ở đây vì cần composite index (roomId + scheduledDate).
+        // Thay vào đó sort client-side sau khi nhận kết quả.
       }
 
-      QuerySnapshot snapshot =
-          await query.orderBy('scheduledDate', descending: true).get();
+      QuerySnapshot snapshot = roomId == null
+          // Khi không filter roomId, orderBy đơn lᮣ không cần composite index
+          ? await query.orderBy('scheduledDate', descending: true).get()
+          // Khi filter roomId, bỏ orderBy để tránh lỗi missing index
+          : await query.get();
 
       _maintenanceRecords = snapshot.docs
           .map((doc) =>
               MaintenanceRecord.fromMap(doc.data() as Map<String, dynamic>))
           .toList();
 
+      // Sort client-side theo scheduledDate giảm dần
+      _maintenanceRecords.sort((a, b) => b.scheduledDate.compareTo(a.scheduledDate));
+
       notifyListeners();
     } catch (e) {
-      _setError('Lỗi tải lịch sử bảo trì: $e');
+      // Dùng _maintenanceError để không ảnh hưởng toàn bộ màn hình
+      _maintenanceError = 'Lỗi tải lịch sử bảo trì: $e';
+      print('[ROOM] ❌ $_maintenanceError');
+      notifyListeners();
     }
   }
 
@@ -305,39 +554,37 @@ class RoomProvider extends ChangeNotifier {
       // Tìm record và cập nhật lastMaintenanceDate của phòng
       MaintenanceRecord? record =
           _maintenanceRecords.firstWhere((r) => r.id == recordId);
-      if (record != null) {
-        await _firestore.collection('rooms').doc(record.roomId).update({
-          'lastMaintenanceDate': Timestamp.fromDate(completedDate),
-          'updatedAt': FieldValue.serverTimestamp(),
-          'updatedBy': currentUser.id,
-        });
+      await _firestore.collection('rooms').doc(record.roomId).update({
+        'lastMaintenanceDate': Timestamp.fromDate(completedDate),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'updatedBy': currentUser.id,
+      });
 
-        // Cập nhật list local
-        int index = _maintenanceRecords.indexWhere((r) => r.id == recordId);
-        if (index != -1) {
-          _maintenanceRecords[index] = MaintenanceRecord(
-            id: record.id,
-            roomId: record.roomId,
-            type: record.type,
-            priority: record.priority,
-            title: record.title,
-            description: record.description,
-            technician: record.technician,
-            scheduledDate: record.scheduledDate,
-            completedDate: completedDate,
-            cost: actualCost ?? record.cost,
-            status: 'completed',
-            photos: record.photos,
-            additionalData: {
-              ...record.additionalData,
-              'completedBy': currentUser.id,
-            },
-          );
-          notifyListeners();
-        }
+      // Cập nhật list local
+      int index = _maintenanceRecords.indexWhere((r) => r.id == recordId);
+      if (index != -1) {
+        _maintenanceRecords[index] = MaintenanceRecord(
+          id: record.id,
+          roomId: record.roomId,
+          type: record.type,
+          priority: record.priority,
+          title: record.title,
+          description: record.description,
+          technician: record.technician,
+          scheduledDate: record.scheduledDate,
+          completedDate: completedDate,
+          cost: actualCost ?? record.cost,
+          status: 'completed',
+          photos: record.photos,
+          additionalData: {
+            ...record.additionalData,
+            'completedBy': currentUser.id,
+          },
+        );
+        notifyListeners();
       }
-
-      print('✅ Đã hoàn thành bảo trì: ${record?.title}');
+    
+      print('✅ Đã hoàn thành bảo trì: ${record.title}');
     } catch (e) {
       _setError('Lỗi hoàn thành bảo trì: $e');
       rethrow;

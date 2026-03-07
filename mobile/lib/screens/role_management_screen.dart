@@ -1,9 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '_edit_name_dialog.dart';
 import '../providers/auth_provider.dart';
+import '../providers/user_management_provider.dart';
+import '../providers/organization_provider.dart';
 import '../models/user_model.dart';
 import '../models/user_role.dart';
+import '../models/team_model.dart';
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  UserManagementScreen (renamed from RoleManagementScreen, backward compat
+//  via alias at bottom)
+// ═══════════════════════════════════════════════════════════════════════════
 class RoleManagementScreen extends StatefulWidget {
   const RoleManagementScreen({Key? key}) : super(key: key);
 
@@ -11,131 +19,303 @@ class RoleManagementScreen extends StatefulWidget {
   State<RoleManagementScreen> createState() => _RoleManagementScreenState();
 }
 
-class _RoleManagementScreenState extends State<RoleManagementScreen> {
-  List<UserModel> _users = [];
-  List<UserModel> _filteredUsers = [];
-  bool _isLoading = false;
-  String? _errorMessage;
-  
-  // Search & Filter state
+class _RoleManagementScreenState extends State<RoleManagementScreen>
+    with SingleTickerProviderStateMixin {
+  final TextEditingController _searchCtrl = TextEditingController();
   String _searchQuery = '';
   String _selectedFilter = 'Tất cả';
+
+  static const _filters = [
+    'Tất cả',
+    'Chờ duyệt',
+    'Admin',
+    'Director',
+    'Manager',
+    'Employee',
+    'Guest',
+  ];
 
   @override
   void initState() {
     super.initState();
-    _loadUsers();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrap());
   }
 
-  Future<void> _loadUsers() async {
-    if (!mounted) return;
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    try {
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      final users = await authProvider.getAllUsers();
-
-      if (mounted) {
-        setState(() {
-          _users = users ?? []; // Đảm bảo không null
-          _filteredUsers = _users;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _users = []; // Reset về mảng rỗng
-          _isLoading = false;
-          _errorMessage = e.toString();
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Lỗi tải danh sách người dùng: $e'),
-            backgroundColor: Colors.red,
-            action: SnackBarAction(
-              label: 'Thử lại',
-              textColor: Colors.white,
-              onPressed: _loadUsers,
-            ),
-          ),
-        );
-      }
-    }
+  Future<void> _bootstrap() async {
+    final auth = context.read<AuthProvider>();
+    final ump = context.read<UserManagementProvider>();
+    ump.setActor(auth.userModel);
+    await ump.loadUsers();
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF6F7FB),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF1A1A1A), size: 20),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: const Text(
-          'Quản lý vai trò',
-          style: TextStyle(
-            color: Color(0xFF1A1A1A),
-            fontWeight: FontWeight.bold,
-            fontSize: 18,
-          ),
-        ),
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  // ── Filter logic ───────────────────────────────────────────────────────
+  List<UserModel> _filtered(List<UserModel> all) {
+    var list = all;
+    if (_searchQuery.isNotEmpty) {
+      final q = _searchQuery.toLowerCase();
+      list = list.where((u) {
+        return u.displayName.toLowerCase().contains(q) ||
+            u.email.toLowerCase().contains(q) ||
+            (u.departmentName ?? '').toLowerCase().contains(q) ||
+            (u.teamId ?? '').toLowerCase().contains(q);
+      }).toList();
+    }
+    switch (_selectedFilter) {
+      case 'Chờ duyệt':
+        list = list.where((u) => _isPending(u)).toList();
+        break;
+      case 'Admin':
+        list = list.where((u) => u.role == UserRole.admin).toList();
+        break;
+      case 'Director':
+        list = list.where((u) => u.role == UserRole.director).toList();
+        break;
+      case 'Manager':
+        list = list.where((u) => u.role == UserRole.manager).toList();
+        break;
+      case 'Employee':
+        list = list.where((u) => u.role == UserRole.employee).toList();
+        break;
+      case 'Guest':
+        list = list.where((u) => u.role == UserRole.guest).toList();
+        break;
+    }
+    return list;
+  }
+
+  bool _isPending(UserModel u) =>
+      u.status == 'pending' ||
+      (!u.isRoleApproved && u.requestedRole != null) ||
+      u.requestedDepartmentId != null;
+
+  // ── Action Handlers for UserCard ───────────────────────────────────────
+  Future<void> _approveUser(UserModel u) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Duyệt yêu cầu'),
+        content: Text(
+            'Duyệt yêu cầu của ${u.displayName.isNotEmpty ? u.displayName : u.email}?\n\n'
+            'Vai trò: ${u.requestedRole != null ? _roleName(u.requestedRole!) : "?"}\n'
+            'Phòng ban: ${u.requestedDepartmentId ?? "?"}'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.search_rounded, color: Color(0xFF1A1A1A)),
-            onPressed: _showSearchDialog,
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: Color(0xFF1A1A1A)),
-            onPressed: _loadUsers,
-          ),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Hủy')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: FilledButton.styleFrom(backgroundColor: Colors.green),
+              child: const Text('Duyệt')),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _buildContent(),
+    );
+    if (ok == true && mounted) {
+      try {
+        await context.read<UserManagementProvider>().approveUser(u.id);
+        if (mounted) context.read<UserManagementProvider>().loadUsers();
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Lỗi: $e')));
+      }
+    }
+  }
+
+  Future<void> _rejectUser(UserModel u) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Từ chối yêu cầu'),
+        content: Text(
+            'Từ chối yêu cầu của ${u.displayName.isNotEmpty ? u.displayName : u.email}?\n\n'
+            'Tài khoản sẽ bị vô hiệu hoá.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Hủy')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('Từ chối')),
+        ],
+      ),
+    );
+    if (ok == true && mounted) {
+      try {
+        await context.read<UserManagementProvider>().rejectUser(u.id);
+        if (mounted) context.read<UserManagementProvider>().loadUsers();
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Lỗi: $e')));
+      }
+    }
+  }
+
+  String _roleName(UserRole r) {
+    switch (r) {
+      case UserRole.admin: return 'Admin';
+      case UserRole.director: return 'Director';
+      case UserRole.manager: return 'Manager';
+      case UserRole.employee: return 'Employee';
+      case UserRole.guest: return 'Guest';
+    }
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────────
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F6FA),
+      appBar: _buildAppBar(),
+      body: Consumer<UserManagementProvider>(
+        builder: (_, ump, __) {
+          if (ump.isLoading) {
+            return const Center(
+              child: CircularProgressIndicator(color: Color(0xFF2B61F6)),
+            );
+          }
+          if (ump.error != null) {
+            return _errorState(ump.error!);
+          }
+          final list = _filtered(ump.users);
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildSearchBar(),
+              _buildFilterBar(ump.users),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text(
+                  'DANH SÁCH NGƯỜI DÙNG',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.blueGrey.shade600,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: list.isEmpty
+                    ? _emptyState()
+                    : RefreshIndicator(
+                        color: const Color(0xFF2B61F6),
+                        onRefresh: () => ump.loadUsers(),
+                        child: ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                          itemCount: list.length,
+                          itemBuilder: (_, i) => _UserCard(
+                            user: list[i],
+                            onAction: _openActions,
+                            onApprove: () => _approveUser(list[i]),
+                            onReject: () => _rejectUser(list[i]),
+                          ),
+                        ),
+                      ),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 
-  Widget _buildContent() {
-    if (_errorMessage != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline_rounded, size: 48, color: Colors.red.shade300),
-            const SizedBox(height: 16),
-            Text(
-              'Có lỗi xảy ra',
-              style: TextStyle(fontSize: 16, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            Text(_errorMessage!, style: TextStyle(color: Colors.grey.shade500)),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _loadUsers,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF9B7FED),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: const Text('Thử lại'),
-            ),
-          ],
+  AppBar _buildAppBar() {
+    return AppBar(
+      backgroundColor: Colors.white,
+      elevation: 0,
+      centerTitle: false,
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back, color: Color(0xFF131313)),
+        onPressed: () => Navigator.of(context).pop(),
+      ),
+      title: const Text(
+        'Quản lý người dùng',
+        style: TextStyle(
+            color: Color(0xFF131313), fontWeight: FontWeight.bold, fontSize: 18),
+      ),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.autorenew_rounded, color: Color(0xFF2B61F6)),
+          onPressed: () => context.read<UserManagementProvider>().loadUsers(),
+          tooltip: 'Tải lại',
         ),
-      );
-    }
+      ],
+    );
+  }
 
-    if (_filteredUsers.isEmpty) {
-      return Center(
+  Widget _buildSearchBar() {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      child: TextField(
+        controller: _searchCtrl,
+        onChanged: (v) => setState(() => _searchQuery = v.trim()),
+        decoration: InputDecoration(
+          hintText: 'Tìm kiếm theo tên, email hoặc vai trò...',
+          hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+          prefixIcon: const Icon(Icons.search_rounded, color: Colors.grey),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.close_rounded, color: Colors.grey, size: 18),
+                  onPressed: () {
+                    _searchCtrl.clear();
+                    setState(() => _searchQuery = '');
+                  },
+                )
+              : null,
+          filled: true,
+          fillColor: Colors.grey.shade50,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(24),
+            borderSide: BorderSide(color: Colors.grey.shade200),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(24),
+            borderSide: BorderSide(color: Colors.grey.shade200),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(24),
+            borderSide: const BorderSide(color: Color(0xFF2B61F6), width: 1.5),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterBar(List<UserModel> all) {
+    final pendingCount = all.where(_isPending).length;
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.only(bottom: 12, left: 16),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: _filters.map((f) {
+            final count = f == 'Chờ duyệt' ? pendingCount : null;
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: _FilterChip(
+                label: f,
+                badge: count,
+                isSelected: _selectedFilter == f,
+                onTap: () => setState(() => _selectedFilter = f),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _emptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -143,1007 +323,1204 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
               _searchQuery.isNotEmpty || _selectedFilter != 'Tất cả'
                   ? Icons.search_off_rounded
                   : Icons.people_outline_rounded,
-              size: 64,
+              size: 72,
               color: Colors.grey.shade300,
             ),
             const SizedBox(height: 16),
             Text(
               _searchQuery.isNotEmpty || _selectedFilter != 'Tất cả'
                   ? 'Không tìm thấy kết quả'
-                  : 'Không có người dùng nào',
-              style: TextStyle(fontSize: 16, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _loadUsers,
-              style: ElevatedButton.styleFrom(
-                 backgroundColor: const Color(0xFF9B7FED),
-                 foregroundColor: Colors.white,
-                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: const Text('Tải lại'),
+                  : 'Chưa có người dùng',
+              style: TextStyle(
+                  color: Colors.grey.shade500,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500),
             ),
           ],
         ),
-      );
-    }
-
-    // Filter Bar (Mock)
-    return Column(
-      children: [
-        // Filter Bar
-        Container(
-          color: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _buildFilterChip('Tất cả', isSelected: _selectedFilter == 'Tất cả'),
-                const SizedBox(width: 8),
-                _buildFilterChip('Director', isSelected: _selectedFilter == 'Director'),
-                const SizedBox(width: 8),
-                _buildFilterChip('Manager', isSelected: _selectedFilter == 'Manager'),
-                const SizedBox(width: 8),
-                _buildFilterChip('Chờ duyệt', isSelected: _selectedFilter == 'Chờ duyệt'),
-              ],
-            ),
-          ),
-        ),
-        
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: _loadUsers,
-            color: const Color(0xFF9B7FED),
-            child: ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: _filteredUsers.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 12),
-              itemBuilder: (context, index) {
-                final user = _filteredUsers[index];
-                return _buildUserCard(user);
-              },
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
-  
-  Widget _buildFilterChip(String label, {bool isSelected = false}) {
+
+  Widget _errorState(String msg) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline_rounded,
+                size: 56, color: Colors.red.shade300),
+            const SizedBox(height: 16),
+            Text(msg,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey.shade600)),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: () => context.read<UserManagementProvider>().loadUsers(),
+              style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF2B61F6)),
+              child: const Text('Thử lại'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Action Bottom Sheet ───────────────────────────────────────────────
+  void _openActions(UserModel user) {
+    final actor = context.read<AuthProvider>().userModel;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _ActionSheet(
+        user: user,
+        actor: actor,
+        onDone: () => context.read<UserManagementProvider>().loadUsers(),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  _FilterChip
+// ═══════════════════════════════════════════════════════════════════════════
+class _FilterChip extends StatelessWidget {
+  final String label;
+  final bool isSelected;
+  final int? badge;
+  final VoidCallback onTap;
+
+  const _FilterChip({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+    this.badge,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasBadge = badge != null && badge! > 0;
+    final displayText = hasBadge ? '$label ($badge)' : label;
+
     return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedFilter = label;
-          _applyFilters();
-        });
-      },
-      child: Container(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF1A1A1A) : Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected ? const Color(0xFF1A1A1A) : Colors.grey.shade300,
-            width: 0.5,
-          ),
+          color: isSelected ? const Color(0xFF2B61F6) : const Color(0xFFF0F0F0),
+          borderRadius: BorderRadius.circular(24),
         ),
         child: Text(
-          label,
+          displayText,
           style: TextStyle(
-            color: isSelected ? Colors.white : Colors.grey.shade700,
-            fontSize: 13,
+            color: isSelected ? Colors.white : const Color(0xFF4A5568),
+            fontSize: 14,
             fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
           ),
         ),
       ),
     );
   }
+}
 
-  void _showSearchDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        contentPadding: const EdgeInsets.all(16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Tìm kiếm người dùng'),
-        content: TextField(
-          autofocus: true,
-          decoration: InputDecoration(
-            hintText: 'Tìm theo tên, email, phòng ban...',
-            prefixIcon: const Icon(Icons.search),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-          onChanged: (value) {
-            setState(() {
-              _searchQuery = value.toLowerCase();
-              _applyFilters();
-            });
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              setState(() {
-                _searchQuery = '';
-                _applyFilters();
-              });
-              Navigator.pop(context);
-            },
-            child: const Text('Xóa'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Đóng'),
-          ),
-        ],
-      ),
-    );
-  }
+// ═══════════════════════════════════════════════════════════════════════════
+//  _UserCard
+// ═══════════════════════════════════════════════════════════════════════════
+class _UserCard extends StatelessWidget {
+  final UserModel user;
+  final void Function(UserModel) onAction;
+  final VoidCallback onApprove;
+  final VoidCallback onReject;
 
-  void _applyFilters() {
-    List<UserModel> result = _users;
+  const _UserCard({
+    required this.user,
+    required this.onAction,
+    required this.onApprove,
+    required this.onReject,
+  });
 
-    // Apply search query
-    if (_searchQuery.isNotEmpty) {
-      result = result.where((user) {
-        final name = user.displayName.toLowerCase();
-        final email = user.email.toLowerCase();
-        final dept = (user.departmentName ?? '').toLowerCase();
-        return name.contains(_searchQuery) ||
-               email.contains(_searchQuery) ||
-               dept.contains(_searchQuery);
-      }).toList();
-    }
+  @override
+  Widget build(BuildContext context) {
+    final isPending = user.status == 'pending' ||
+        (!user.isRoleApproved && user.requestedRole != null) ||
+        user.requestedDepartmentId != null;
 
-    // Apply role filter
-    if (_selectedFilter != 'Tất cả') {
-      if (_selectedFilter == 'Chờ duyệt') {
-        result = result.where((user) => !user.isRoleApproved && user.pendingRole != null).toList();
-      } else {
-        result = result.where((user) => _getRoleName(user.role) == _selectedFilter).toList();
-      }
-    }
-
-    setState(() {
-      _filteredUsers = result;
-    });
-  }
-
-  Widget _buildUserCard(UserModel user) {
     return Container(
+      margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.04),
-            blurRadius: 10,
+            blurRadius: 8,
             offset: const Offset(0, 2),
           ),
         ],
       ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          onTap: () {
-            // Future enhancement: Open detail view
-            // For now, trigger menu for quick actions
-          },
-          borderRadius: BorderRadius.circular(16),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Top row: avatar + info + status + menu ──
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // Top Row: Avatar + Name/Email + Action
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildUserAvatar(user),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                _Avatar(user: user),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Name row + status
+                      Row(
                         children: [
-                          Text(
-                            _getSafeDisplayName(user),
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
-                              color: Color(0xFF1A1A1A),
+                          Expanded(
+                            child: Text(
+                              _name(user),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15,
+                                color: Color(0xFF131313),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            _getSafeEmail(user),
-                            style: TextStyle(
-                              color: Colors.grey.shade500,
-                              fontSize: 13,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                          _StatusDot(status: user.status),
                         ],
                       ),
-                    ),
-                    _buildPopupMenu(user),
-                  ],
-                ),
-                
-                const SizedBox(height: 12),
-                const Divider(height: 1, thickness: 0.5),
-                const SizedBox(height: 12),
-                
-                // Info Rows
-                _buildInfoRow(
-                  'Vai trò:', 
-                  _getRoleName(user.role), 
-                  valueColor: _getRoleTextColor(user.role),
-                  icon: Icons.badge_outlined,
-                ),
-                
-                if (user.departmentName?.isNotEmpty == true) ...[
-                  const SizedBox(height: 8),
-                  _buildInfoRow(
-                    'Phòng ban:', 
-                    user.departmentName!, 
-                    valueColor: Colors.blue.shade700,
-                    icon: Icons.business_outlined,
-                  ),
-                ],
-                
-                // Status Chip Row (if needed - e.g. Pending)
-                if (!user.isRoleApproved && user.pendingRole != null) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.schedule_rounded, size: 14, color: Colors.orange.shade700),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Chờ duyệt: ${_getPendingRoleName(user.pendingRole!.name)}',
-                          style: TextStyle(
-                            color: Colors.orange.shade700,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
+                      const SizedBox(height: 2),
+                      // Email
+                      Text(
+                        user.email,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF8A92A6),
                         ),
-                      ],
-                    ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
-                ],
+                ),
+                // Three dots menu (always visible for non-pending)
+                if (!isPending)
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    icon: const Icon(Icons.more_vert_rounded,
+                        color: Color(0xFF8A92A6), size: 20),
+                    onPressed: () => onAction(user),
+                  ),
               ],
             ),
-          ),
+            const SizedBox(height: 10),
+            // ── Tags row ──
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                _TagChip(label: _roleName(user.role), style: _TagStyle.role),
+                if (user.departmentName != null && user.departmentName!.isNotEmpty)
+                  _TagChip(label: user.departmentName!.toUpperCase(), style: _TagStyle.outlined),
+                if (user.teamId != null && user.teamId!.isNotEmpty)
+                  _TagChip(label: _teamLabel(user.teamId!).toUpperCase(), style: _TagStyle.outlined),
+              ],
+            ),
+            // ── Pending actions ──
+            if (isPending) ...[
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: onApprove,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF2B61F6),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      child: const Text('Duyệt',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w600, fontSize: 14)),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: onReject,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF4A5568),
+                        side: const BorderSide(color: Color(0xFFDDE1E7)),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      child: const Text('Từ chối',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w600, fontSize: 14)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
         ),
       ),
     );
   }
-  
-  Widget _buildInfoRow(String label, String value, {Color? valueColor, IconData? icon}) {
+
+  String _name(UserModel u) =>
+      u.displayName.isNotEmpty ? u.displayName : u.email.split('@').first;
+
+  String _teamLabel(String teamId) {
+    if (teamId.endsWith('__general')) return 'Chung';
+    final parts = teamId.split('__');
+    return parts.length > 1 ? parts.last : teamId;
+  }
+
+  String _roleName(UserRole r) {
+    switch (r) {
+      case UserRole.admin: return 'ADMIN';
+      case UserRole.director: return 'DIRECTOR';
+      case UserRole.manager: return 'MANAGER';
+      case UserRole.employee: return 'EMPLOYEE';
+      case UserRole.guest: return 'GUEST';
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  _TagChip
+// ═══════════════════════════════════════════════════════════════════════════
+enum _TagStyle { role, outlined }
+
+class _TagChip extends StatelessWidget {
+  final String label;
+  final _TagStyle style;
+
+  const _TagChip({required this.label, required this.style});
+
+  @override
+  Widget build(BuildContext context) {
+    final isRole = style == _TagStyle.role;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: isRole ? const Color(0xFFF0F0F0) : Colors.transparent,
+        borderRadius: BorderRadius.circular(6),
+        border: isRole
+            ? null
+            : Border.all(color: const Color(0xFF2B61F6), width: 1),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: isRole ? const Color(0xFF4A5568) : const Color(0xFF2B61F6),
+          letterSpacing: 0.3,
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  _StatusDot — inline status indicator «• Hoạt động»
+// ═══════════════════════════════════════════════════════════════════════════
+class _StatusDot extends StatelessWidget {
+  final String? status;
+  const _StatusDot({this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final eff = status ?? 'active';
+    Color dotColor;
+    String label;
+    switch (eff) {
+      case 'pending':
+        dotColor = const Color(0xFFF59E0B);
+        label = 'Chờ duyệt';
+        break;
+      case 'disabled':
+        dotColor = const Color(0xFFEF4444);
+        label = 'Bị khoá';
+        break;
+      default:
+        dotColor = const Color(0xFF10B981);
+        label = 'Hoạt động';
+    }
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        if (icon != null) ...[
-          Icon(icon, size: 16, color: Colors.grey.shade400),
-          const SizedBox(width: 8),
-        ],
+        Container(
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(
+            color: dotColor,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 4),
         Text(
           label,
           style: TextStyle(
-            fontSize: 13,
-            color: Colors.grey.shade600,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Container(
-           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-           decoration: BoxDecoration(
-             color: (valueColor ?? Colors.black).withOpacity(0.05),
-             borderRadius: BorderRadius.circular(6),
-           ),
-           child: Text(
-            value,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: valueColor ?? const Color(0xFF1A1A1A),
-            ),
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: dotColor,
           ),
         ),
       ],
     );
   }
+}
 
-  Widget _buildUserAvatar(UserModel user) {
-    final displayName = _getSafeDisplayName(user);
-    final avatarText =
-        displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
+// ═══════════════════════════════════════════════════════════════════════════
+//  _Avatar — colorful initials based on name hash
+// ═══════════════════════════════════════════════════════════════════════════
+class _Avatar extends StatelessWidget {
+  final UserModel user;
+
+  const _Avatar({required this.user});
+
+  static const _palette = [
+    Color(0xFF4F6EF7), // blue
+    Color(0xFF10B981), // teal
+    Color(0xFFEF8C39), // orange
+    Color(0xFFEC4899), // pink
+    Color(0xFF8B5CF6), // purple
+    Color(0xFF06B6D4), // cyan
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final name = user.displayName.isNotEmpty ? user.displayName : user.email;
+    final colorIdx = name.codeUnits.fold(0, (a, b) => a + b) % _palette.length;
+    final bgColor = _palette[colorIdx];
+
+    final initials = user.displayName.isNotEmpty
+        ? user.displayName
+            .trim()
+            .split(' ')
+            .where((w) => w.isNotEmpty)
+            .map((w) => w[0].toUpperCase())
+            .take(2)
+            .join()
+        : user.email.isNotEmpty
+            ? user.email[0].toUpperCase()
+            : '?';
 
     return CircleAvatar(
-      radius: 20,
-      backgroundImage: user.photoURL != null && user.photoURL!.isNotEmpty
-          ? NetworkImage(user.photoURL!)
-          : null,
-      backgroundColor: const Color(0xFFF0F1F5),
-      child: user.photoURL == null || user.photoURL!.isEmpty
+      radius: 24,
+      backgroundColor: bgColor,
+      backgroundImage:
+          user.photoURL != null ? NetworkImage(user.photoURL!) : null,
+      child: user.photoURL == null
           ? Text(
-              avatarText,
+              initials,
               style: const TextStyle(
-                color: Color(0xFF9B7FED),
+                color: Colors.white,
                 fontWeight: FontWeight.bold,
-                fontSize: 16,
+                fontSize: 15,
               ),
             )
           : null,
     );
   }
+}
 
-  Widget _buildPopupMenu(UserModel user) {
-    return SizedBox(
-      width: 32,
-      height: 32,
-      child: PopupMenuButton<String>(
-        padding: EdgeInsets.zero,
-        offset: const Offset(0, 8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        elevation: 3,
-        constraints: const BoxConstraints(minWidth: 200, maxWidth: 200),
-        color: Colors.white,
-        onSelected: (String action) => _handleUserAction(user, action),
-        itemBuilder: (context) {
-          List<PopupMenuEntry<String>> items = [];
 
-          // Approval actions if pending
-          if (!user.isRoleApproved && user.pendingRole != null) {
-            items.add(
-              PopupMenuItem(
-                value: 'approve',
-                height: 46,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Row(
-                  children: [
-                    Icon(Icons.check_circle_outline_rounded, color: Colors.grey.shade700, size: 20),
-                    const SizedBox(width: 10),
-                    const Text(
-                      'Duyệt vai trò',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black87),
-                    ),
-                  ],
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  _ActionSheet — full bottom sheet with grouped actions
+// ═══════════════════════════════════════════════════════════════════════════
+class _ActionSheet extends StatefulWidget {
+  final UserModel user;
+  final UserModel? actor;
+  final VoidCallback onDone;
+
+  const _ActionSheet(
+      {required this.user, required this.actor, required this.onDone});
+
+  @override
+  State<_ActionSheet> createState() => _ActionSheetState();
+}
+
+class _ActionSheetState extends State<_ActionSheet> {
+  bool _busy = false;
+
+  UserModel get u => widget.user;
+  UserModel? get actor => widget.actor;
+
+  bool get _isPending =>
+      u.status == 'pending' ||
+      (!u.isRoleApproved && u.requestedRole != null) ||
+      u.requestedDepartmentId != null;
+
+  bool get _canEditAdmin => actor?.isAdmin ?? false;
+  bool get _isTargetAdmin => u.role == UserRole.admin;
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final safeBottom = media.padding.bottom;
+
+    return Container(
+      padding: EdgeInsets.only(bottom: safeBottom),
+      decoration: const BoxDecoration(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        child: Container(
+          color: const Color(0xFFF5F6FF),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              // Handle
+              Container(
+                width: 42,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
-            );
-            items.add(
-              PopupMenuItem(
-                value: 'reject',
-                height: 46,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Row(
-                  children: [
-                    Icon(Icons.cancel_outlined, color: Colors.grey.shade700, size: 20),
-                    const SizedBox(width: 10),
-                    const Text(
-                      'Từ chối',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black87),
-                    ),
-                  ],
-                ),
-              ),
-            );
-            items.add(PopupMenuDivider(height: 1, thickness: 0.5));
-          }
+              const SizedBox(height: 16),
 
-          // Role selection items
-          items.addAll(
-            UserRole.values.map((role) {
-              final isSelected = user.role == role;
-              
-              return PopupMenuItem(
-                value: 'change_${role.name}',
-                height: 46,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Row(
+              // Avatar + name section (giống layout màn 1)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
                   children: [
-                    Icon(
-                      _getRoleIconForMenu(role),
-                      color: Colors.grey.shade700,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        _getRoleName(role),
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: isSelected ? const Color(0xFF9B7FED) : Colors.black87,
+                    Stack(
+                      alignment: Alignment.bottomRight,
+                      children: [
+                        CircleAvatar(
+                          radius: 40,
+                          backgroundColor: Colors.white,
+                          child: _Avatar(user: u),
                         ),
-                        overflow: TextOverflow.ellipsis,
+                        Container(
+                          margin: const EdgeInsets.only(right: 6, bottom: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2B61F6),
+                            borderRadius: BorderRadius.circular(14),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.2),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          padding: const EdgeInsets.all(4),
+                          child: const Icon(
+                            Icons.edit_rounded,
+                            color: Colors.white,
+                            size: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      u.displayName.isNotEmpty
+                          ? u.displayName
+                          : 'Người dùng',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF111827),
                       ),
                     ),
-                    if (isSelected)
-                      const Icon(
-                        Icons.check_rounded,
-                        color: Color(0xFF9B7FED),
-                        size: 18,
+                    const SizedBox(height: 4),
+                    Text(
+                      u.email,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF6B7280),
                       ),
+                    ),
+                    const SizedBox(height: 20),
                   ],
                 ),
-              );
-            }).toList(),
-          );
+              ),
 
-          // Delete action
-          items.add(PopupMenuDivider(height: 1, thickness: 0.5));
-          items.add(
-            PopupMenuItem(
-              value: 'delete',
-              height: 46,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Row(
-                children: [
-                  Icon(Icons.delete_outline_rounded, color: Colors.red.shade600, size: 20),
-                  const SizedBox(width: 10),
-                  Text(
-                    'Xóa',
-                    style: TextStyle(
-                      color: Colors.red.shade600,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
+              // Nội dung scrollable
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: media.size.height * 0.55,
+                ),
+                child: SingleChildScrollView(
+                  padding:
+                      const EdgeInsets.only(left: 16, right: 16, bottom: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (!_isTargetAdmin || _canEditAdmin) ...[
+                        _sectionHeader('THÔNG TIN CÁ NHÂN'),
+                        const SizedBox(height: 8),
+                        _cardWrapper(
+                          children: [
+                            _actionTile(
+                              icon: Icons.badge_outlined,
+                              label: 'Sửa họ tên',
+                              subtitle: u.displayName.isNotEmpty
+                                  ? u.displayName
+                                  : 'Người dùng',
+                              onTap: () => _editDisplayName(context),
+                            ),
+                            _dividerThin(),
+                            _actionTile(
+                              icon: Icons.domain_rounded,
+                              label: 'Đổi phòng ban',
+                              subtitle: u.departmentName ?? 'Chưa có',
+                              enabled: actor?.isAdmin == true,
+                              onTap: () => _changeDepartment(context),
+                            ),
+                            _dividerThin(),
+                            _actionTile(
+                              icon: Icons.groups_2_rounded,
+                              label: 'Đổi team',
+                              subtitle: _teamLabel(u.teamId),
+                              enabled: u.departmentId != null,
+                              onTap: () => _changeTeam(context),
+                            ),
+                          ],
+                        ),
+                      ],
+
+                      const SizedBox(height: 20),
+
+                      if (!_isTargetAdmin || _canEditAdmin) ...[
+                        _sectionHeader('PHÂN QUYỀN'),
+                        const SizedBox(height: 8),
+                        _cardWrapper(
+                          children: [
+                            _actionTile(
+                              icon: Icons.manage_accounts_rounded,
+                              label: 'Đổi vai trò',
+                              subtitle: _roleName(u.role),
+                              onTap: () => _changeRole(context),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                      ],
+
+                      _sectionHeader('TRẠNG THÁI'),
+                      const SizedBox(height: 8),
+                      _cardWrapper(
+                        children: [
+                          if (u.status != 'active')
+                            _actionTile(
+                              icon: Icons.check_circle_outline_rounded,
+                              label: 'Kích hoạt tài khoản',
+                              color: Colors.green.shade700,
+                              onTap: () => _setStatus(context, 'active'),
+                            ),
+                          if (u.status == 'active' && !_isTargetAdmin)
+                            _actionTile(
+                              icon: Icons.block_rounded,
+                              label: 'Vô hiệu hoá',
+                              color: Colors.orange.shade700,
+                              onTap: () => _setStatus(context, 'disabled'),
+                            ),
+                          if (u.status == 'active' && _isTargetAdmin)
+                            _actionTile(
+                              icon: Icons.info_outline_rounded,
+                              label: 'Admin đang hoạt động',
+                              enabled: false,
+                              color: Colors.grey.shade600,
+                              subtitle: 'Không thể vô hiệu hoá Admin hiện tại',
+                              onTap: () {},
+                            ),
+                        ],
+                      ),
+
+                      if (_isPending) ...[
+                        const SizedBox(height: 20),
+                        _sectionHeader('XÉT DUYỆT YÊU CẦU'),
+                        const SizedBox(height: 8),
+                        _cardWrapper(
+                          children: [
+                            _actionTile(
+                              icon: Icons.thumb_up_rounded,
+                              label: 'Duyệt yêu cầu',
+                              color: Colors.green.shade700,
+                              onTap: () => _approve(context),
+                            ),
+                            _dividerThin(),
+                            _actionTile(
+                              icon: Icons.thumb_down_rounded,
+                              label: 'Từ chối yêu cầu',
+                              color: Colors.red.shade600,
+                              onTap: () => _reject(context),
+                            ),
+                          ],
+                        ),
+                      ],
+
+                      if (!_isTargetAdmin || _canEditAdmin) ...[
+                        const SizedBox(height: 20),
+                        _sectionHeader('VÙNG NGUY HIỂM'),
+                        const SizedBox(height: 8),
+                        _cardWrapper(
+                          children: [
+                            _actionTile(
+                              icon: Icons.delete_forever_rounded,
+                              label: 'Xoá vĩnh viễn',
+                              subtitle: 'Không thể khôi phục',
+                              color: Colors.red.shade700,
+                              onTap: () => _deleteUser(context),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+
+              // Nút dưới cùng: Hủy / Lưu thay đổi
+              Container(
+                padding: EdgeInsets.fromLTRB(
+                    16, 8, 16, 8 + (safeBottom > 0 ? 4 : 8)),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Color(0x11000000),
+                      blurRadius: 8,
+                      offset: Offset(0, -2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                          side: const BorderSide(color: Color(0xFFE5E7EB)),
+                        ),
+                        child: const Text(
+                          'Hủy',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF6B7280),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          widget.onDone();
+                        },
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                          backgroundColor: const Color(0xFF2B61F6),
+                        ),
+                        child: const Text(
+                          'Lưu thay đổi',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              if (_busy)
+                Container(
+                  color: Colors.black12,
+                  child: const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(24),
+                      child: CircularProgressIndicator(),
                     ),
                   ),
-                ],
-              ),
-            ),
-          );
-
-          return items;
-        },
-        icon: Icon(Icons.more_horiz_rounded, color: Colors.grey.shade400, size: 24),
-        tooltip: 'Thao tác',
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  IconData _getRoleIconForMenu(UserRole role) {
-    switch (role) {
-      case UserRole.admin:
-        return Icons.admin_panel_settings_outlined;
-      case UserRole.director:
-        return Icons.work_outline_rounded;
-      case UserRole.manager:
-        return Icons.groups_outlined;
-      case UserRole.employee:
-        return Icons.person_outline_rounded;
-      case UserRole.guest:
-        return Icons.person_off_outlined;
-    }
-  }
-
-
-
-  Widget _buildUserStatus(UserModel user) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Hiển thị vai trò hiện tại
-        Row(
-          children: [
-            const Icon(Icons.badge, size: 16, color: Colors.grey),
-            const SizedBox(width: 8),
-            const Text(
-              'Vai trò hiện tại:',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(width: 8),
-            _buildRoleChip(user.role),
-          ],
-        ),
-
-        // Hiển thị trạng thái duyệt
-        if (!user.isRoleApproved && user.pendingRole != null) ...[
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              const Icon(Icons.pending, size: 16, color: Colors.orange),
-              const SizedBox(width: 8),
-              const Text(
-                'Chờ duyệt:',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(width: 8),
-              _buildPendingRoleChip(user.pendingRole!.name),
-            ],
-          ),
-        ],
-
-        // Hiển thị phòng ban nếu đã được duyệt
-        if (user.isRoleApproved && user.departmentName?.isNotEmpty == true) ...[
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              const Icon(Icons.business, size: 16, color: Colors.blue),
-              const SizedBox(width: 8),
-              const Text(
-                'Phòng ban:',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.blue.withOpacity(0.3)),
-                ),
-                child: Text(
-                  user.departmentName!,
-                  style: TextStyle(
-                    color: Colors.blue.shade700,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-
-        // Hiển thị phòng ban chờ duyệt
-        if (!user.isRoleApproved && user.pendingDepartment != null) ...[
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              const Icon(Icons.business_outlined,
-                  size: 16, color: Colors.orange),
-              const SizedBox(width: 8),
-              const Text(
-                'Phòng ban chờ duyệt:',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.orange.withOpacity(0.3)),
-                ),
-                child: Text(
-                  user.pendingDepartment!,
-                  style: TextStyle(
-                    color: Colors.orange.shade700,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-
-        // Hiển thị trạng thái tổng quát
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Icon(
-              user.isRoleApproved ? Icons.check_circle : Icons.schedule,
-              size: 16,
-              color: user.isRoleApproved ? Colors.green : Colors.orange,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              user.isRoleApproved ? 'Đã được duyệt' : 'Chờ duyệt vai trò',
-              style: TextStyle(
-                fontSize: 12,
-                color: user.isRoleApproved ? Colors.green : Colors.orange,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildRoleChip(UserRole role) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: _getRoleColor(role),
-        borderRadius: BorderRadius.circular(12),
-      ),
+  Widget _sectionHeader(String text) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 0, 4, 4),
       child: Text(
-        _getRoleName(role),
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 12,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPendingRoleChip(String pendingRole) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.orange.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.orange.withOpacity(0.3)),
-      ),
-      child: Text(
-        _getPendingRoleName(pendingRole),
+        text,
         style: TextStyle(
-          color: Colors.orange.shade700,
           fontSize: 12,
-          fontWeight: FontWeight.w500,
+          fontWeight: FontWeight.w700,
+          color: Colors.grey.shade500,
+          letterSpacing: 0.5,
         ),
       ),
     );
   }
 
-  // Helper methods để đảm bảo an toàn
-  String _getSafeDisplayName(UserModel user) {
-    if (user.displayName.isNotEmpty) {
-      return user.displayName;
-    }
-    if (user.email.isNotEmpty) {
-      return user.email.split('@')[0]; // Lấy phần trước @ của email
-    }
-    return 'Người dùng';
+  Widget _cardWrapper({required List<Widget> children}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: children,
+      ),
+    );
   }
 
-  String _getSafeEmail(UserModel user) {
-    return user.email.isNotEmpty ? user.email : 'Không có email';
+  Widget _dividerThin() {
+    return const Divider(
+      height: 1,
+      thickness: 0.7,
+      indent: 16,
+      endIndent: 16,
+    );
   }
 
-  String _getRoleName(UserRole role) {
-    switch (role) {
-      case UserRole.admin:
-        return 'Admin';
-      case UserRole.director:
-        return 'Director';
-      case UserRole.manager:
-        return 'Manager';
-      case UserRole.employee:
-        return 'Employee';
-      case UserRole.guest:
-        return 'Guest';
+  Widget _actionTile({
+    required IconData icon,
+    required String label,
+    String? subtitle,
+    Color? color,
+    bool enabled = true,
+    required VoidCallback onTap,
+  }) {
+    final c = color ?? const Color(0xFF1A1A1A);
+    return ListTile(
+      enabled: enabled,
+      leading: Container(
+        width: 38,
+        height: 38,
+        decoration: BoxDecoration(
+          color: c.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, size: 20, color: enabled ? c : Colors.grey.shade400),
+      ),
+      title: Text(label,
+          style: TextStyle(
+              fontSize: 14.5,
+              fontWeight: FontWeight.w600,
+              color: enabled ? c : Colors.grey.shade400)),
+      subtitle: subtitle != null
+          ? Text(subtitle,
+              style: TextStyle(fontSize: 12.5, color: Colors.grey.shade500))
+          : null,
+      onTap: enabled ? onTap : null,
+      dense: true,
+    );
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  String _teamLabel(String? teamId) {
+    if (teamId == null || teamId.isEmpty) return 'Chưa có';
+    if (teamId.endsWith('__general')) return 'Chung (Chưa phân team)';
+    final parts = teamId.split('__');
+    return parts.length > 1 ? parts.last : teamId;
+  }
+
+  String _roleName(UserRole r) {
+    switch (r) {
+      case UserRole.admin: return 'Admin';
+      case UserRole.director: return 'Director';
+      case UserRole.manager: return 'Manager';
+      case UserRole.employee: return 'Employee';
+      case UserRole.guest: return 'Guest';
     }
   }
 
-  Color _getRoleColor(UserRole role) {
-    switch (role) {
-      case UserRole.admin:
-        return Colors.red;
-      case UserRole.director:
-        return Colors.orange;
-      case UserRole.manager:
-        return Colors.blue;
-      case UserRole.employee:
-        return Colors.green;
-      case UserRole.guest:
-        return Colors.grey;
-    }
-  }
-
-
-
-  String _getPendingRoleName(String pendingRole) {
-    switch (pendingRole.toLowerCase()) {
-      case 'admin':
-        return 'Admin';
-      case 'director':
-        return 'Director';
-      case 'manager':
-        return 'Manager';
-      case 'employee':
-        return 'Employee';
-      case 'guest':
-        return 'Guest';
-      default:
-        return pendingRole;
-    }
-  }
-
-  // Helper methods
-  Color _getRoleTextColor(UserRole role) {
-    switch (role) {
-      case UserRole.admin:
-        return Colors.red.shade700;
-      case UserRole.director:
-        return Colors.orange.shade800;
-      case UserRole.manager:
-        return Colors.blue.shade700;
-      default:
-        return Colors.grey.shade700;
-    }
-  }
-
-  Future<void> _handleUserAction(UserModel user, String action) async {
-    if (!mounted) return;
-
+  // ── Core run helpers ───────────────────────────────────────────────────────
+  Future<void> _run(Future<void> Function() task) async {
+    setState(() => _busy = true);
     try {
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-
-      switch (action) {
-        case 'approve':
-          await _approveUserRole(user, authProvider);
-          break;
-        case 'reject':
-          await _rejectUserRole(user, authProvider);
-          break;
-        case 'delete':
-          await _deleteUser(user, authProvider);
-          break;
-        default:
-          if (action.startsWith('change_')) {
-            final roleName = action.substring(7); // Bỏ "change_"
-            final newRole = UserRole.values.firstWhere(
-              (role) => role.name == roleName,
-              orElse: () => UserRole.guest,
-            );
-            await _changeUserRole(user, newRole);
-          }
-          break;
+      await task();
+      if (mounted) {
+        Navigator.pop(context);
+        widget.onDone();
       }
     } catch (e) {
+      debugPrint('[USER_EDIT] Firestore error: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Lỗi thực hiện thao tác: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _approveUserRole(
-      UserModel user, AuthProvider authProvider) async {
-    if (!mounted || user.pendingRole == null) return;
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Xác nhận duyệt vai trò'),
-        content: Text(
-          'Bạn có chắc chắn muốn duyệt vai trò ${_getRoleName(user.pendingRole!)} '
-          'cho ${_getSafeDisplayName(user)}?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Hủy'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-            child: const Text('Duyệt'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !mounted) return;
-
-    await authProvider.approveUserRole(user.id);
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Đã duyệt vai trò ${_getRoleName(user.pendingRole!)} cho ${_getSafeDisplayName(user)}',
-          ),
-          backgroundColor: Colors.green,
-        ),
-      );
-      await _loadUsers();
-    }
-  }
-
-  Future<void> _rejectUserRole(
-      UserModel user, AuthProvider authProvider) async {
-    if (!mounted || user.pendingRole == null) return;
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Xác nhận từ chối'),
-        content: Text(
-          'Bạn có chắc chắn muốn từ chối vai trò ${_getRoleName(user.pendingRole!)} '
-          'cho ${_getSafeDisplayName(user)}?\n\nNgười dùng sẽ vẫn giữ vai trò Guest.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Hủy'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Từ chối'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !mounted) return;
-
-    await authProvider.rejectUserRole(user.id);
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Đã từ chối vai trò cho ${_getSafeDisplayName(user)}',
-          ),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      await _loadUsers();
-    }
-  }
-
-  Future<void> _changeUserRole(UserModel user, UserRole newRole) async {
-    if (!mounted) return;
-
-    // Hiển thị dialog xác nhận
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Xác nhận thay đổi'),
-        content: Text(
-          'Bạn có chắc chắn muốn thay đổi vai trò của ${_getSafeDisplayName(user)} '
-          'từ ${_getRoleName(user.role)} thành ${_getRoleName(newRole)}?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Hủy'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF9B7FED)),
-            child: const Text('Xác nhận'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !mounted) return;
-
-    try {
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      await authProvider.changeUserRole(user.id, newRole);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Đã thay đổi vai trò của ${_getSafeDisplayName(user)} thành ${_getRoleName(newRole)}',
-            ),
-            backgroundColor: Colors.green,
-          ),
-        );
-
-        // Reload user list
-        await _loadUsers();
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Lỗi thay đổi vai trò: $e'),
-            backgroundColor: Colors.red,
-            action: SnackBarAction(
-              label: 'Thử lại',
-              textColor: Colors.white,
-              onPressed: () => _changeUserRole(user, newRole),
-            ),
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _deleteUser(UserModel user, AuthProvider authProvider) async {
-    if (!mounted) return;
-
-    // Kiểm tra không cho xóa chính mình
-    if (authProvider.userModel?.id == user.id) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Bạn không thể xóa chính mình!'),
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Lỗi: $e'),
           backgroundColor: Colors.red,
-        ),
-      );
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _runAndRefresh(
+      UserManagementProvider ump, Future<void> Function() task) async {
+    setState(() => _busy = true);
+    try {
+      await task();
+      debugPrint('[USER_EDIT] Firestore success');
+      if (mounted) {
+        Navigator.pop(context);
+        widget.onDone();
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Đã cập nhật thành công'),
+          backgroundColor: Color(0xFF10B981),
+          duration: Duration(seconds: 2),
+        ));
+      }
+    } catch (e) {
+      debugPrint('[USER_EDIT] Firestore error: $e');
+      if (mounted) {
+        setState(() => _busy = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Lỗi: $e'),
+          backgroundColor: Colors.red,
+        ));
+      }
+    }
+  }
+
+  // ── Edit display name ──────────────────────────────────────────────────────
+  void _editDisplayName(BuildContext ctx) async {
+    debugPrint('[USER_EDIT] updateDisplayName opened uid=${u.id}');
+    final ump = ctx.read<UserManagementProvider>();
+    final ctrl = TextEditingController(text: u.displayName);
+
+    final result = await showDialog<String>(
+      context: ctx,
+      // Use EditNameDialog which handles keyboard insets internally
+      // without registering cross-overlay MediaQuery dependencies.
+      builder: (dCtx) => EditNameDialog(initial: u.displayName),
+    );
+    ctrl.dispose();
+
+    if (result != null && result.isNotEmpty && mounted) {
+      debugPrint('[USER_EDIT] updateDisplayName payload uid=${u.id} name=$result');
+      await _runAndRefresh(ump, () => ump.updateDisplayName(u.id, result));
+    }
+  }
+
+  // ── Change department ──────────────────────────────────────────────────────
+  void _changeDepartment(BuildContext ctx) async {
+    debugPrint('[USER_EDIT] changeDepartment opened uid=${u.id}');
+    final orgProvider = ctx.read<OrganizationProvider>();
+    final ump = ctx.read<UserManagementProvider>();
+
+    if (orgProvider.availableDepartments.isEmpty) {
+      await orgProvider.loadDepartments();
+    }
+    if (!mounted) return;
+
+    final depts = orgProvider.availableDepartments;
+    if (depts.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Không có dữ liệu phòng ban')));
+      }
       return;
     }
 
-    // Hiển thị dialog xác nhận
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('⚠️ Xác nhận xóa thành viên'),
-        content: Text(
-          'Bạn có chắc chắn muốn xóa thành viên ${_getSafeDisplayName(user)} (${_getSafeEmail(user)})?\n\n'
-          'Tất cả dữ liệu của thành viên này sẽ bị xóa vĩnh viễn.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Hủy'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text(
-              'XÓA VĨNH VIỄN',
-              style: TextStyle(color: Colors.white),
+    String? selectedDeptId = u.departmentId;
+
+    final result = await showDialog<String>(
+      context: ctx,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx2, setD) => AlertDialog(
+          title: const Text('Chọn phòng ban'),
+          contentPadding: const EdgeInsets.symmetric(vertical: 8),
+          content: SizedBox(
+            width: 340,
+            child: ListView(
+              shrinkWrap: true,
+              children: depts.map((d) {
+                return RadioListTile<String>(
+                  value: d.id,
+                  groupValue: selectedDeptId,
+                  title: Text(d.name),
+                  dense: true,
+                  activeColor: const Color(0xFF2B61F6),
+                  onChanged: (v) => setD(() => selectedDeptId = v),
+                );
+              }).toList(),
             ),
           ),
-        ],
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx2),
+                child: const Text('Hủy')),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx2, selectedDeptId),
+                child: const Text('Xác nhận')),
+          ],
+        ),
       ),
     );
 
-    if (confirmed != true || !mounted) return;
+    if (result != null && result != u.departmentId && mounted) {
+      final deptObj =
+          depts.firstWhere((d) => d.id == result, orElse: () => depts.first);
+      debugPrint(
+          '[USER_EDIT] changeDepartment payload uid=${u.id} deptId=$result name=${deptObj.name}');
+      await _runAndRefresh(
+          ump, () => ump.updateDepartment(u.id, result, deptObj.name));
+    }
+  }
 
+  // ── Change team ────────────────────────────────────────────────────────────
+  void _changeTeam(BuildContext ctx) async {
+    debugPrint('[USER_EDIT] changeTeam opened uid=${u.id} dept=${u.departmentId}');
+    if (u.departmentId == null) return;
+    final ump = ctx.read<UserManagementProvider>();
+    List<TeamModel> teams;
     try {
-      await authProvider.deleteUser(user.id);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '✅ Đã xóa thành viên ${_getSafeDisplayName(user)}',
-            ),
-            backgroundColor: Colors.green,
-          ),
-        );
-
-        // Reload user list
-        await _loadUsers();
-      }
+      teams = await ump.fetchTeamsForDepartment(u.departmentId!);
     } catch (e) {
+      debugPrint('[USER_EDIT] fetchTeams error: $e');
+      teams = [];
+    }
+    if (!mounted) return;
+    if (teams.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ Lỗi xóa thành viên: $e'),
-            backgroundColor: Colors.red,
-            action: SnackBarAction(
-              label: 'Thử lại',
-              textColor: Colors.white,
-              onPressed: () => _deleteUser(user, authProvider),
+            const SnackBar(content: Text('Không có team trong phòng ban này')));
+      }
+      return;
+    }
+
+    String? selectedTeamId = u.teamId;
+
+    final result = await showDialog<TeamModel>(
+      context: ctx,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx2, setD) => AlertDialog(
+          title: Text('Chọn team — ${u.departmentName ?? u.departmentId}'),
+          contentPadding: const EdgeInsets.symmetric(vertical: 8),
+          content: SizedBox(
+            width: 340,
+            child: ListView(
+              shrinkWrap: true,
+              children: teams.map((t) {
+                return RadioListTile<String>(
+                  value: t.id,
+                  groupValue: selectedTeamId,
+                  title: Text(t.name,
+                      style: TextStyle(
+                          fontStyle: t.isGeneralTeam
+                              ? FontStyle.italic
+                              : FontStyle.normal)),
+                  subtitle: t.description.isNotEmpty
+                      ? Text(t.description,
+                          style: const TextStyle(fontSize: 12))
+                      : null,
+                  dense: true,
+                  activeColor: const Color(0xFF2B61F6),
+                  onChanged: (v) => setD(() => selectedTeamId = v),
+                );
+              }).toList(),
             ),
           ),
-        );
-      }
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx2),
+                child: const Text('Hủy')),
+            FilledButton(
+                onPressed: () => Navigator.pop(
+                    ctx2,
+                    teams.firstWhere((t) => t.id == selectedTeamId,
+                        orElse: () => teams.first)),
+                child: const Text('Xác nhận')),
+          ],
+        ),
+      ),
+    );
+
+    if (result != null && mounted) {
+      debugPrint(
+          '[USER_EDIT] changeTeam payload uid=${u.id} teamId=${result.id} teamName=${result.name}');
+      await _runAndRefresh(ump,
+          () => ump.updateTeam(u.id, u.departmentId!, result.id, result.name));
+    }
+  }
+
+  // ── Change role ────────────────────────────────────────────────────────────
+  void _changeRole(BuildContext ctx) async {
+    debugPrint('[USER_EDIT] changeRole opened uid=${u.id}');
+    final ump = ctx.read<UserManagementProvider>();
+    UserRole selected = u.role;
+
+    final allowedRoles = actor?.isAdmin == true
+        ? UserRole.values
+        : actor?.isDirector == true
+            ? [UserRole.manager, UserRole.employee, UserRole.guest]
+            : [UserRole.employee, UserRole.guest];
+
+    final result = await showDialog<UserRole>(
+      context: ctx,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx2, setD) => AlertDialog(
+          title: const Text('Chọn vai trò'),
+          contentPadding: const EdgeInsets.symmetric(vertical: 8),
+          content: SizedBox(
+            width: 300,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: allowedRoles.map((r) {
+                return RadioListTile<UserRole>(
+                  value: r,
+                  groupValue: selected,
+                  title: Text(_roleName(r)),
+                  dense: true,
+                  activeColor: const Color(0xFF2B61F6),
+                  onChanged: (v) => setD(() => selected = v!),
+                );
+              }).toList(),
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx2),
+                child: const Text('Hủy')),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx2, selected),
+                child: const Text('Xác nhận')),
+          ],
+        ),
+      ),
+    );
+
+    if (result != null && result != u.role && mounted) {
+      debugPrint(
+          '[USER_EDIT] changeRole payload uid=${u.id} newRole=${result.name}');
+      await _runAndRefresh(ump, () => ump.updateRole(u.id, result));
+    }
+  }
+
+  // ── Toggle status ──────────────────────────────────────────────────────────
+  Future<void> _setStatus(BuildContext ctx, String status) async {
+    final ump = ctx.read<UserManagementProvider>();
+    debugPrint('[USER_EDIT] setStatus payload uid=${u.id} status=$status');
+    await _runAndRefresh(ump, () => ump.updateStatus(u.id, status));
+  }
+
+  // ── Approve ────────────────────────────────────────────────────────────────
+  Future<void> _approve(BuildContext ctx) async {
+    final ump = ctx.read<UserManagementProvider>();
+    final ok = await showDialog<bool>(
+      context: ctx,
+      builder: (_) => AlertDialog(
+        title: const Text('Duyệt yêu cầu'),
+        content: Text(
+            'Duyệt yêu cầu của ${u.displayName.isNotEmpty ? u.displayName : u.email}?\n\n'
+            'Vai trò: ${u.requestedRole != null ? _roleName(u.requestedRole!) : "?"}\n'
+            'Phòng ban: ${u.requestedDepartmentId ?? "?"}'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Hủy')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: FilledButton.styleFrom(backgroundColor: Colors.green),
+              child: const Text('Duyệt')),
+        ],
+      ),
+    );
+    if (ok == true && mounted) {
+      debugPrint('[USER_EDIT] approveUser payload uid=${u.id}');
+      await _runAndRefresh(ump, () => ump.approveUser(u.id));
+    }
+  }
+
+  // ── Reject ─────────────────────────────────────────────────────────────────
+  Future<void> _reject(BuildContext ctx) async {
+    final ump = ctx.read<UserManagementProvider>();
+    final ok = await showDialog<bool>(
+      context: ctx,
+      builder: (_) => AlertDialog(
+        title: const Text('Từ chối yêu cầu'),
+        content: Text(
+            'Từ chối yêu cầu của ${u.displayName.isNotEmpty ? u.displayName : u.email}?\n\n'
+            'Tài khoản sẽ bị vô hiệu hoá.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Hủy')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('Từ chối')),
+        ],
+      ),
+    );
+    if (ok == true && mounted) {
+      debugPrint('[USER_EDIT] rejectUser payload uid=${u.id}');
+      await _runAndRefresh(ump, () => ump.rejectUser(u.id));
+    }
+  }
+
+  // ── Delete ─────────────────────────────────────────────────────────────────
+  Future<void> _deleteUser(BuildContext ctx) async {
+    final ump = ctx.read<UserManagementProvider>();
+    final ok = await showDialog<bool>(
+      context: ctx,
+      builder: (_) => AlertDialog(
+        title: const Text('⚠️ Xoá vĩnh viễn'),
+        content: Text(
+            'Bạn có chắc muốn XOÁ VĨNH VIỄN tài khoản\n'
+            '"${u.displayName.isNotEmpty ? u.displayName : u.email}"?\n\n'
+            'Thao tác này KHÔNG THỂ hoàn tác.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Hủy')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('XÓA VĨNH VIỄN')),
+        ],
+      ),
+    );
+    if (ok == true && mounted) {
+      debugPrint('[USER_EDIT] hardDeleteUser payload uid=${u.id}');
+      await _runAndRefresh(ump, () => ump.hardDeleteUser(u.id));
     }
   }
 }

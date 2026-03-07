@@ -16,7 +16,6 @@ import 'settings_screen.dart';
 
 import 'package:metting_app/components/menu_item.dart';
 import 'admin_dashboard_screen.dart';
-import 'notification_screen.dart';
 import 'package:metting_app/providers/notification_provider.dart';
 import 'calendar_screen.dart';
 import 'package:intl/intl.dart';
@@ -59,6 +58,9 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  /// Lắng nghe được gọi khi AuthProvider notify (userModel đã load xong)
+  // _onAuthChanged hiện không còn được sử dụng, giữ lại comment nếu cần tái dùng trong tương lai.
+
   void _loadNotifications() {
     final authProvider =
         Provider.of<app_auth.AuthProvider>(context, listen: false);
@@ -70,11 +72,13 @@ class _HomeScreenState extends State<HomeScreen> {
         '🔄 Home: AuthProvider user model is null: ${authProvider.userModel == null}');
 
     if (authProvider.userModel != null) {
+      final user = authProvider.userModel!;
       print(
-          '🔄 Home: Loading notifications for user ${authProvider.userModel!.id}');
+          '👤 Home: Current user id=${user.id}, role=${user.role}, departmentId=${user.departmentId}, teamId=${user.teamId}');
       print(
-          '🔄 Home: User display name: ${authProvider.userModel!.displayName}');
-      notificationProvider.loadNotifications(authProvider.userModel!.id);
+          '🔄 Home: Loading notifications for user ${user.id}');
+      print('🔄 Home: User display name: ${user.displayName}');
+      notificationProvider.loadNotifications(user.id);
     } else {
       print('⚠️ Home: No user model found, cannot load notifications');
     }
@@ -89,46 +93,70 @@ class _HomeScreenState extends State<HomeScreen> {
         Provider.of<SimpleAnalyticsProvider>(context, listen: false);
 
     if (authProvider.userModel != null) {
-      // Load meeting data
-      meetingProvider.loadMeetings(authProvider.userModel!);
+      final user = authProvider.userModel!;
+      print(
+          '🏠 Home._loadAllData for user id=${user.id}, role=${user.role}, departmentId=${user.departmentId}, teamId=${user.teamId}');
 
-      // Load analytics data
-      analyticsProvider.loadAnalytics();
+      // Load meeting data (scoped by role in MeetingProvider)
+      meetingProvider.loadMeetings(user);
 
-      print('✅ Home: Started loading all data');
+      // Load analytics data ONLY for admins (global dashboard)
+      if (user.role == UserRole.admin) {
+        print(
+            '📊 Home: User is admin, loading global analytics from analytics_events');
+        analyticsProvider.loadAnalytics();
+      } else {
+        print(
+            '📊 Home: Skipping analytics_events queries for non-admin role ${user.role}');
+      }
+
+      print('✅ Home: Started loading scoped data');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Consumer lắng nghe AuthProvider để redirect khi userModel thay đổi
+    return Consumer<app_auth.AuthProvider>(
+      builder: (context, authProvider, _) {
+        // Redirect ngay khi phát hiện user pending (userModel có thể load muộn)
+        if (authProvider.needsRoleSelection) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              Navigator.pushReplacementNamed(context, '/role-selection');
+            }
+          });
+        }
 
+        final colorScheme = Theme.of(context).colorScheme;
+        final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return WillPopScope(
-      onWillPop: () async {
-        // Prevent back button from exiting the app/going to login
-        // Instead, do nothing or show exit confirmation
-        return false;
+        return WillPopScope(
+          onWillPop: () async {
+            // Prevent back button from exiting the app/going to login
+            // Instead, do nothing or show exit confirmation
+            return false;
+          },
+          child: ZoomDrawer(
+            controller: zoomDrawerController,
+            menuBackgroundColor: isDark ? colorScheme.surface : Colors.white,
+            shadowLayer1Color:
+                isDark ? colorScheme.surfaceContainerHighest : const Color(0xFFF5F5F5),
+            shadowLayer2Color: isDark
+                ? colorScheme.surfaceContainerHighest.withOpacity(0.7)
+                : const Color(0xFFE6E6E6).withOpacity(0.3),
+            borderRadius: 32.0,
+            showShadow: true,
+            style: DrawerStyle.defaultStyle,
+            angle: -12.0,
+            drawerShadowsBackgroundColor:
+                isDark ? Colors.black38 : Colors.grey.shade300,
+            slideWidth: MediaQuery.of(context).size.width * 0.7,
+            menuScreen: _buildMenuScreen(context),
+            mainScreen: _buildMainScreen(context),
+          ),
+        );
       },
-      child: ZoomDrawer(
-        controller: zoomDrawerController,
-        menuBackgroundColor: isDark ? colorScheme.surface : Colors.white,
-        shadowLayer1Color:
-            isDark ? colorScheme.surfaceVariant : const Color(0xFFF5F5F5),
-        shadowLayer2Color: isDark
-            ? colorScheme.surfaceVariant.withOpacity(0.7)
-            : const Color(0xFFE6E6E6).withOpacity(0.3),
-        borderRadius: 32.0,
-        showShadow: true,
-        style: DrawerStyle.defaultStyle,
-        angle: -12.0,
-        drawerShadowsBackgroundColor:
-            isDark ? Colors.black38 : Colors.grey.shade300,
-        slideWidth: MediaQuery.of(context).size.width * 0.7,
-        menuScreen: _buildMenuScreen(context),
-        mainScreen: _buildMainScreen(context),
-      ),
     );
   }
 
@@ -231,8 +259,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Consumer<app_auth.AuthProvider>(
                   builder: (context, authProvider, child) {
                     final userModel = authProvider.userModel;
-                    final isGlobalAdmin = userModel?.role == UserRole.admin;
-                    // final isAdmin = userModel?.isAdmin == true; // Replaced by isGlobalAdmin check
+                    final userRole = userModel?.role;
+                    final hasSystemManagementAccess =
+                        userRole == UserRole.admin ||
+                        userRole == UserRole.director ||
+                        userRole == UserRole.manager;
 
                     return SingleChildScrollView(
                       physics: const BouncingScrollPhysics(),
@@ -293,8 +324,10 @@ class _HomeScreenState extends State<HomeScreen> {
                             },
                           ),
 
-                          // Chỉ hiển thị cho Global Admin
-                          if (isGlobalAdmin) ...[
+                          // Quản lý hệ thống:
+                          // - Admin: full quyền trong dashboard
+                          // - Director/Manager: chỉ thấy các mục được giới hạn bởi backend/rules
+                          if (hasSystemManagementAccess) ...[
                             const SizedBox(height: 12),
                             Container(
                               margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -382,22 +415,14 @@ class _HomeScreenState extends State<HomeScreen> {
     ];
 
     final List<Widget> body = [
-      FutureBuilder<Map<String, dynamic>?>(
-        future: authProvider.getUserData(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text('Đã xảy ra lỗi: \\${snapshot.error}'));
-          }
-          if (!snapshot.hasData || snapshot.data == null) {
-            return const Center(
-                child: Text('Không tìm thấy dữ liệu người dùng.'));
-          }
-          final userData = snapshot.data!;
-          final displayName = userData['displayName'] as String?;
-          return _buildMainContent(displayName ?? 'Người dùng');
+      // Dùng trực tiếp userModel (đã cache) thay vì gọi Firestore lại
+      Builder(
+        builder: (context) {
+          final userModel = authProvider.userModel;
+          final displayName = userModel?.displayName?.trim().isNotEmpty == true
+              ? userModel!.displayName
+              : (userModel?.email.split('@').first ?? 'Người dùng');
+          return _buildMainContent(displayName);
         },
       ),
       const MeetingListScreen(),
@@ -427,7 +452,7 @@ class _HomeScreenState extends State<HomeScreen> {
               color: kPrimaryColor.withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(
+            child: const Icon(
               IconlyBold.category,
               color: kPrimaryColor,
               size: 20,
@@ -527,24 +552,55 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildMainContent(String displayName) {
-    return SingleChildScrollView(
+    // Responsive scale based on iPhone 11 (375px width)
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final scale = (screenWidth / 375).clamp(0.85, 1.3);
+    final horizontalPadding = (16 * scale).clamp(12.0, 24.0);
+    final verticalSpacing = (24 * scale).clamp(16.0, 32.0);
+    
+    // Safe area bottom padding for devices with gesture navigation
+    final bottomPadding = MediaQuery.paddingOf(context).bottom;
+    
+    return CustomScrollView(
       physics: const BouncingScrollPhysics(),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Chào mừng và nút tạo cuộc họp
-            _buildUpcomingMeetingCard(displayName),
-            const SizedBox(height: 24),
-            // 4 ô dashboard có thể lướt ngang
-            _buildDashboardSection(),
-            const SizedBox(height: 24),
-            // Phần cuộc họp gần đây
-            _buildRecentMeetingsSection(),
-          ],
+      slivers: [
+        // Top padding
+        SliverPadding(
+          padding: EdgeInsets.only(
+            top: 16 * scale,
+            left: horizontalPadding,
+            right: horizontalPadding,
+          ),
+          sliver: SliverToBoxAdapter(
+            child: _buildUpcomingMeetingCard(displayName),
+          ),
         ),
-      ),
+        
+        // Dashboard section
+        SliverPadding(
+          padding: EdgeInsets.only(
+            top: verticalSpacing,
+            left: horizontalPadding,
+            right: horizontalPadding,
+          ),
+          sliver: SliverToBoxAdapter(
+            child: _buildDashboardSection(),
+          ),
+        ),
+        
+        // Recent meetings section
+        SliverPadding(
+          padding: EdgeInsets.only(
+            top: verticalSpacing,
+            left: horizontalPadding,
+            right: horizontalPadding,
+            bottom: bottomPadding + 16, // Safe area + extra padding
+          ),
+          sliver: SliverToBoxAdapter(
+            child: _buildRecentMeetingsSection(),
+          ),
+        ),
+      ],
     );
   }
 
@@ -567,6 +623,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildUpcomingMeetingCard(String displayName) {
+    // Responsive scale based on iPhone 11 (375px width)
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final scale = (screenWidth / 375).clamp(0.85, 1.3);
+    
     return Consumer<app_auth.AuthProvider>(
       builder: (context, authProvider, child) {
         final userModel = authProvider.userModel;
@@ -603,8 +663,14 @@ class _HomeScreenState extends State<HomeScreen> {
           departmentAndRole = 'Khách';
         }
 
+        // Responsive values
+        final cardPadding = (20 * scale).clamp(16.0, 24.0);
+        final avatarRadius = (30 * scale).clamp(24.0, 36.0);
+        final nameFontSize = (20 * scale).clamp(16.0, 24.0);
+        final roleFontSize = (14 * scale).clamp(12.0, 16.0);
+        
         return Container(
-          padding: const EdgeInsets.all(20),
+          padding: EdgeInsets.all(cardPadding),
           decoration: BoxDecoration(
             color: kAccentColor, // A nice blue/purple color
             borderRadius: BorderRadius.circular(20),
@@ -623,31 +689,31 @@ class _HomeScreenState extends State<HomeScreen> {
               Row(
                 children: [
                   CircleAvatar(
-                    radius: 30,
+                    radius: avatarRadius,
                     backgroundImage: NetworkImage(
                         'https://i.pravatar.cc/150?u=${userModel?.email ?? 'default'}'),
                   ),
-                  const SizedBox(width: 15),
+                  SizedBox(width: 15 * scale),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           actualDisplayName,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: Colors.white,
-                            fontSize: 20,
+                            fontSize: nameFontSize,
                             fontWeight: FontWeight.bold,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 5),
+                        SizedBox(height: 5 * scale),
                         Text(
                           departmentAndRole,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: Colors.white70,
-                            fontSize: 14,
+                            fontSize: roleFontSize,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -655,9 +721,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 15),
+                  SizedBox(width: 15 * scale),
                   Container(
-                    padding: const EdgeInsets.all(8),
+                    padding: EdgeInsets.all(8 * scale),
                     decoration: const BoxDecoration(
                       color: Colors.white,
                       shape: BoxShape.circle,
@@ -665,14 +731,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Icon(
                       Icons.videocam_outlined,
                       color: kAccentColor,
-                      size: 24,
+                      size: (24 * scale).clamp(20.0, 28.0),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 15),
+              SizedBox(height: 15 * scale),
               const Divider(color: Colors.white24),
-              const SizedBox(height: 15),
+              SizedBox(height: 15 * scale),
 
               // Middle section: Date and Time
               Row(
@@ -723,7 +789,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+              SizedBox(height: 20 * scale),
 
               // Bottom section: Buttons
               Row(
@@ -740,19 +806,22 @@ class _HomeScreenState extends State<HomeScreen> {
                         );
                       },
                       style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        padding: EdgeInsets.symmetric(vertical: 14 * scale),
                         side: const BorderSide(color: Colors.white54),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      child: const Text(
+                      child: Text(
                         'Cuộc Họp Mới',
-                        style: TextStyle(color: Colors.white),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: (14 * scale).clamp(12.0, 16.0),
+                        ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 15),
+                  SizedBox(width: 15 * scale),
                   Expanded(
                     child: ElevatedButton(
                       onPressed: () {
@@ -764,12 +833,17 @@ class _HomeScreenState extends State<HomeScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.white,
                         foregroundColor: kAccentColor,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        padding: EdgeInsets.symmetric(vertical: 14 * scale),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      child: const Text('Cuộc Họp Gần Đây'),
+                      child: Text(
+                        'Cuộc Họp Gần Đây',
+                        style: TextStyle(
+                          fontSize: (14 * scale).clamp(12.0, 16.0),
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -782,13 +856,16 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildDashboardSection() {
+    // Responsive scale
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final scale = (screenWidth / 375).clamp(0.85, 1.3);
+    
     return Consumer<MeetingProvider>(
       builder: (context, meetingProvider, child) {
         // Calculate real statistics from meetings
         final meetings = meetingProvider.meetings;
         final now = DateTime.now();
         final today = DateTime(now.year, now.month, now.day);
-        final tomorrow = today.add(const Duration(days: 1));
 
         // Today's meetings
         final todayMeetings = meetings.where((meeting) {
@@ -901,7 +978,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 16),
             if (meetingProvider.isLoading)
-              Container(
+              SizedBox(
                 height: 160,
                 child: const Center(
                   child: CircularProgressIndicator(),
@@ -909,7 +986,7 @@ class _HomeScreenState extends State<HomeScreen> {
               )
             else
               SizedBox(
-                height: 160, // Adjusted height
+                height: (160 * scale).clamp(140.0, 180.0), // Responsive height
                 child: ListView.builder(
                   scrollDirection: Axis.horizontal,
                   physics: const BouncingScrollPhysics(),
@@ -917,14 +994,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   clipBehavior: Clip.none, // To prevent shadow clipping
                   itemBuilder: (context, index) {
                     final card = cardData[index];
-                    // Calculate width to show ~3 items
-                    final screenWidth = MediaQuery.of(context).size.width;
-                    final cardWidth = screenWidth / 3.5;
+                    // Calculate width to show ~3 items with responsive scaling
+                    final cardWidth = (screenWidth / 3.5).clamp(95.0, 130.0);
+                    final cardMargin = (12 * scale).clamp(8.0, 16.0);
 
                     return Container(
                       width: cardWidth,
                       // Add left margin for all cards except the first
-                      margin: EdgeInsets.only(left: index == 0 ? 0 : 12),
+                      margin: EdgeInsets.only(left: index == 0 ? 0 : cardMargin),
                       child: _DashboardCard(
                         icon: card['icon'] as IconData,
                         title: card['title'] as String,
@@ -933,6 +1010,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         color: card['color'] as Color,
                         iconBackground: card['iconBackground'] as Color,
                         onTap: card['onTap'] as VoidCallback,
+                        scale: scale,
                       ),
                     );
                   },
@@ -1007,12 +1085,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               )
             else
-              ListView.builder(
+              ListView.separated(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: meetingProvider.meetings.length > 3
                     ? 3
                     : meetingProvider.meetings.length,
+                separatorBuilder: (context, index) => const SizedBox(height: 12),
                 itemBuilder: (context, index) {
                   final meeting = meetingProvider.meetings[index];
                   return _buildMeetingCard(meeting);
@@ -1036,154 +1115,167 @@ class _HomeScreenState extends State<HomeScreen> {
       statusText = 'Sắp diễn ra';
     }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Card(
-        elevation: 0,
-        color: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(
-            color: isCompleted
-                ? Colors.grey.shade200
-                : kPrimaryLightColor.withOpacity(0.3),
-            width: 1,
-          ),
+    return Card(
+      elevation: 0,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: isCompleted
+              ? Colors.grey.shade200
+              : kPrimaryLightColor.withOpacity(0.3),
+          width: 1,
         ),
-        child: InkWell(
-          onTap: () {
-            // Navigate to meeting detail screen
-            _navigateToMeetingDetail(meeting.id);
-          },
-          borderRadius: BorderRadius.circular(16),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                // Icon container
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: isCompleted
-                        ? Colors.grey.shade100
-                        : (isOngoing
-                            ? Colors.green.withOpacity(0.1)
-                            : kPrimaryColor.withOpacity(0.1)),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    isCompleted
-                        ? Icons.check_circle
-                        : (isOngoing ? Icons.video_call : Icons.videocam),
-                    color: isCompleted
-                        ? Colors.grey
-                        : (isOngoing ? Colors.green : kPrimaryColor),
-                    size: 24,
-                  ),
+      ),
+      child: InkWell(
+        onTap: () {
+          _navigateToMeetingDetail(meeting.id);
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Icon container
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: isCompleted
+                      ? Colors.grey.shade100
+                      : (isOngoing
+                          ? Colors.green.withOpacity(0.1)
+                          : kPrimaryColor.withOpacity(0.1)),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                const SizedBox(width: 16),
-                // Meeting info
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        meeting.title,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: isCompleted ? Colors.grey : Colors.black87,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.access_time,
-                            size: 14,
-                            color: Colors.grey.shade600,
+                child: Icon(
+                  isCompleted
+                      ? Icons.check_circle
+                      : (isOngoing ? Icons.video_call : Icons.videocam),
+                  color: isCompleted
+                      ? Colors.grey
+                      : (isOngoing ? Colors.green : kPrimaryColor),
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Meeting info - use Expanded to prevent overflow
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Title row with status badge
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            meeting.title,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: isCompleted ? Colors.grey : Colors.black87,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(width: 4),
-                          Text(
+                        ),
+                        const SizedBox(width: 8),
+                        // Status badge inline with title
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isCompleted
+                                ? Colors.grey.withOpacity(0.1)
+                                : (isOngoing
+                                    ? Colors.green.withOpacity(0.1)
+                                    : kPrimaryColor.withOpacity(0.1)),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            statusText,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: isCompleted
+                                  ? Colors.grey
+                                  : (isOngoing ? Colors.green : kPrimaryColor),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    // Time row
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.access_time,
+                          size: 13,
+                          color: Colors.grey.shade600,
+                        ),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
                             '${DateFormat('HH:mm').format(meeting.startTime)} - ${DateFormat('HH:mm').format(meeting.endTime)} • ${DateFormat('dd/MM').format(meeting.startTime)}',
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: 11,
                               color: Colors.grey.shade600,
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Icon(
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    // Location and participants row
+                    Row(
+                      children: [
+                        Icon(
+                          meeting.isVirtual
+                              ? Icons.videocam_outlined
+                              : Icons.location_on_outlined,
+                          size: 13,
+                          color: Colors.grey.shade600,
+                        ),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
                             meeting.isVirtual
-                                ? Icons.video_call_outlined
-                                : Icons.location_on_outlined,
-                            size: 14,
-                            color: Colors.grey.shade600,
-                          ),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              meeting.isVirtual
-                                  ? 'Trực tuyến'
-                                  : (meeting.physicalLocation ??
-                                      'Chưa có địa điểm'),
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade600,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Icon(
-                            Icons.people_outline,
-                            size: 14,
-                            color: Colors.grey.shade600,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${meeting.participantCount} người',
+                                ? 'P...'
+                                : (meeting.physicalLocation ?? 'P...'),
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: 11,
                               color: Colors.grey.shade600,
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        ],
-                      ),
-                    ],
-                  ),
+                        ),
+                        const SizedBox(width: 8),
+                        Icon(
+                          Icons.people_outline,
+                          size: 13,
+                          color: Colors.grey.shade600,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${meeting.participantCount} người',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                // Status indicator
-                if (!isCompleted)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isOngoing
-                          ? Colors.green.withOpacity(0.1)
-                          : kPrimaryColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      statusText,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isOngoing ? Colors.green : kPrimaryColor,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -1340,6 +1432,7 @@ class _DashboardCard extends StatelessWidget {
   final Color color;
   final Color iconBackground;
   final VoidCallback onTap;
+  final double scale;
 
   const _DashboardCard({
     required this.icon,
@@ -1349,10 +1442,19 @@ class _DashboardCard extends StatelessWidget {
     required this.color,
     required this.iconBackground,
     required this.onTap,
+    this.scale = 1.0,
   });
 
   @override
   Widget build(BuildContext context) {
+    // Responsive sizes with clamp for min/max bounds
+    final iconSize = (22 * scale).clamp(18.0, 26.0);
+    final iconContainerSize = (40 * scale).clamp(32.0, 48.0);
+    final valueFontSize = (26 * scale).clamp(20.0, 32.0);
+    final titleFontSize = (13 * scale).clamp(11.0, 15.0);
+    final subtitleFontSize = (11 * scale).clamp(9.0, 13.0);
+    final padding = (12 * scale).clamp(8.0, 16.0);
+    
     return Material(
       color: Colors.transparent,
       borderRadius: BorderRadius.circular(16),
@@ -1370,7 +1472,7 @@ class _DashboardCard extends StatelessWidget {
               width: 1,
             ),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: EdgeInsets.symmetric(horizontal: padding, vertical: padding),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1379,13 +1481,13 @@ class _DashboardCard extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Container(
-                    width: 40,
-                    height: 40,
+                    width: iconContainerSize,
+                    height: iconContainerSize,
                     decoration: BoxDecoration(
                       color: iconBackground,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Icon(icon, color: color, size: 22),
+                    child: Icon(icon, color: color, size: iconSize),
                   ),
                   Icon(
                     Icons.arrow_forward_ios,
@@ -1400,7 +1502,7 @@ class _DashboardCard extends StatelessWidget {
                   Text(
                     value,
                     style: TextStyle(
-                      fontSize: 26,
+                      fontSize: valueFontSize,
                       fontWeight: FontWeight.bold,
                       color: color,
                     ),
@@ -1411,7 +1513,7 @@ class _DashboardCard extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: titleFontSize,
                       fontWeight: FontWeight.w500,
                       color: Colors.grey.shade700,
                     ),
@@ -1419,7 +1521,7 @@ class _DashboardCard extends StatelessWidget {
                   Text(
                     subtitle,
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: subtitleFontSize,
                       color: Colors.grey.shade500,
                     ),
                   ),

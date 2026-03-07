@@ -231,8 +231,9 @@ class FileModel {
   String get sizeFormatted {
     if (size < 1024) return '${size}B';
     if (size < 1024 * 1024) return '${(size / 1024).toStringAsFixed(1)}KB';
-    if (size < 1024 * 1024 * 1024)
+    if (size < 1024 * 1024 * 1024) {
       return '${(size / (1024 * 1024)).toStringAsFixed(1)}MB';
+    }
     return '${(size / (1024 * 1024 * 1024)).toStringAsFixed(1)}GB';
   }
 
@@ -405,10 +406,12 @@ class FolderModel {
 
   String get totalSizeFormatted {
     if (totalSize < 1024) return '${totalSize}B';
-    if (totalSize < 1024 * 1024)
+    if (totalSize < 1024 * 1024) {
       return '${(totalSize / 1024).toStringAsFixed(1)}KB';
-    if (totalSize < 1024 * 1024 * 1024)
+    }
+    if (totalSize < 1024 * 1024 * 1024) {
       return '${(totalSize / (1024 * 1024)).toStringAsFixed(1)}MB';
+    }
     return '${(totalSize / (1024 * 1024 * 1024)).toStringAsFixed(1)}GB';
   }
 }

@@ -269,7 +269,7 @@ class _AddEditRoomScreenState extends State<AddEditRoomScreen> {
                   color: Colors.blue.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
+                child: const Icon(
                   Icons.info_outline,
                   color: Colors.blue,
                   size: 20,
@@ -434,7 +434,7 @@ class _AddEditRoomScreenState extends State<AddEditRoomScreen> {
                   color: Colors.green.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
+                child: const Icon(
                   Icons.location_on,
                   color: Colors.green,
                   size: 20,
@@ -502,7 +502,7 @@ class _AddEditRoomScreenState extends State<AddEditRoomScreen> {
                   color: Colors.purple.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
+                child: const Icon(
                   Icons.analytics_outlined,
                   color: Colors.purple,
                   size: 20,
@@ -775,7 +775,7 @@ class _AddEditRoomScreenState extends State<AddEditRoomScreen> {
                   color: Colors.orange.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
+                child: const Icon(
                   Icons.info,
                   color: Colors.orange,
                   size: 20,
@@ -891,7 +891,7 @@ class _AddEditRoomScreenState extends State<AddEditRoomScreen> {
                   color: Colors.teal.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
+                child: const Icon(
                   Icons.devices,
                   color: Colors.teal,
                   size: 20,
@@ -966,7 +966,7 @@ class _AddEditRoomScreenState extends State<AddEditRoomScreen> {
                         ),
                       ),
                       if (isSelected)
-                        Icon(
+                        const Icon(
                           Icons.check_circle,
                           color: Colors.blue,
                           size: 16,

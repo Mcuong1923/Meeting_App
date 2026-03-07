@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
 import 'package:iconly/iconly.dart';
 import '../models/meeting_minutes_model.dart';
-import '../constants.dart';
-import '../providers/meeting_provider.dart';
 import 'meeting_detail_screen.dart';
 
 class MinutesViewScreen extends StatelessWidget {

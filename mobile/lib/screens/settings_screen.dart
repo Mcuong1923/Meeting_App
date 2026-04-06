@@ -29,29 +29,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       backgroundColor: themeProvider.isDarkMode
           ? const Color(0xFF000000)
-          : const Color(0xFFF2F2F7),
-      appBar: AppBar(
-        backgroundColor:
-            themeProvider.isDarkMode ? const Color(0xFF1C1C1E) : Colors.white,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-      ),
+          : const Color(0xFFF8F9FA), // Lighter background
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         children: [
           // ACCOUNT Section
-          _buildSectionHeader('Account'),
-          const SizedBox(height: 8),
+          _buildSectionHeader('Tài Khoản'),
+          const SizedBox(height: 12),
           _buildCompactAccountRow(authProvider),
           
+          const SizedBox(height: 24),
           // SETTINGS Section
-          _buildSectionHeader('Settings'),
-          const SizedBox(height: 8),
+          _buildSectionHeader('Cài đặt hệ thống'),
+          const SizedBox(height: 12),
 
           // Ngôn ngữ
           _buildSettingItem(
             icon: Icons.language,
-            iconColor: const Color(0xFF4A90E2),
+            iconColor: const Color(0xFF3B82F6),
+            iconBgColor: const Color(0xFFDBEAFE),
             title: 'Ngôn Ngữ',
             subtitle: 'Tiếng Việt',
             onTap: () => ScaffoldMessenger.of(context).showSnackBar(
@@ -62,8 +58,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           // Màu Chủ Đề
           _buildSettingItem(
-            icon: Icons.palette_outlined,
-            iconColor: themeProvider.primaryColor,
+            icon: Icons.palette_rounded,
+            iconColor: const Color(0xFF8B5CF6),
+            iconBgColor: const Color(0xFFEDE9FE),
             title: 'Màu Chủ Đề',
             subtitle: 'Tùy chỉnh màu sắc ứng dụng',
             onTap: () => _showColorPicker(context, themeProvider),
@@ -72,8 +69,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           // Thông báo
           _buildToggleItem(
-            icon: Icons.notifications_outlined,
-            iconColor: themeProvider.primaryColor,
+            icon: Icons.notifications_rounded,
+            iconColor: const Color(0xFFF59E0B),
+            iconBgColor: const Color(0xFFFEF3C7),
             title: 'Thông báo',
             subtitle: 'Nhận thông báo về cuộc họp',
             value: _pushNotification,
@@ -84,10 +82,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // Quản trị (chỉ hiện với admin/director)
           if (authProvider.userModel?.isAdmin == true) ...[
             _buildSettingItem(
-              icon: Icons.meeting_room,
-              iconColor: Colors.purple,
+              icon: Icons.meeting_room_rounded,
+              iconColor: const Color(0xFF10B981),
+              iconBgColor: const Color(0xFFD1FAE5),
               title: 'Quản lý phòng họp',
-              subtitle: 'Quản lý phòng, tiện ích và bảo trì',
+              subtitle: 'Thiết lập tiện ích & bảo trì',
               onTap: () {
                 Navigator.push(
                   context,
@@ -106,8 +105,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 12),
             _buildSettingItem(
-              icon: Icons.auto_fix_high,
-              iconColor: Colors.indigo,
+              icon: Icons.auto_fix_high_rounded,
+              iconColor: const Color(0xFF6366F1),
+              iconBgColor: const Color(0xFFE0E7FF),
               title: 'Setup phòng họp',
               subtitle: 'Cấu hình và tạo phòng mặc định',
               onTap: () {
@@ -132,10 +132,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           if (authProvider.userModel?.isDirector == true &&
               authProvider.userModel?.isAdmin != true) ...[
             _buildSettingItem(
-              icon: Icons.manage_accounts,
-              iconColor: Colors.blue,
+              icon: Icons.manage_accounts_rounded,
+              iconColor: const Color(0xFF3B82F6),
+              iconBgColor: const Color(0xFFDBEAFE),
               title: 'Quản lý vai trò',
-              subtitle: 'Phê duyệt và quản lý nhân viên trong phòng ban',
+              subtitle: 'Phê duyệt và quản lý nhân tài khoản',
               onTap: () {
                 Navigator.push(
                   context,
@@ -155,12 +156,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 12),
           ],
 
-          // Đổi mật khẩu
+          // Đổi mật khẩu -> Bảo mật
           _buildSettingItem(
-            icon: Icons.security_outlined,
-            iconColor: const Color(0xFF8E8E93),
-            title: 'Đổi mật khẩu',
-            subtitle: 'Cập nhật mật khẩu tài khoản',
+            icon: Icons.security_rounded,
+            iconColor: const Color(0xFFEF4444),
+            iconBgColor: const Color(0xFFFEE2E2),
+            title: 'Bảo mật',
+            subtitle: 'Mật khẩu và xác thực 2 lớp',
             onTap: () => ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Chức năng đang phát triển')),
             ),
@@ -169,8 +171,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           // Thông tin ứng dụng
           _buildSettingItem(
-            icon: Icons.info_outline,
-            iconColor: const Color(0xFF8E8E93),
+            icon: Icons.info_outline_rounded,
+            iconColor: const Color(0xFF6B7280),
+            iconBgColor: const Color(0xFFF3F4F6),
             title: 'Thông tin ứng dụng',
             subtitle: 'Phiên bản và thông tin chi tiết',
             onTap: () => _showAppInfo(),
@@ -179,8 +182,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           // Đăng xuất
           _buildSettingItem(
-            icon: Icons.logout,
-            iconColor: Colors.red,
+            icon: Icons.logout_rounded,
+            iconColor: const Color(0xFFEF4444),
+            iconBgColor: const Color(0xFFFEE2E2),
             title: 'Đăng xuất',
             subtitle: 'Thoát khỏi tài khoản hiện tại',
             onTap: () => _confirmLogout(authProvider),
@@ -196,6 +200,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildSettingItem({
     required IconData icon,
     required Color iconColor,
+    required Color iconBgColor,
     required String title,
     required String subtitle,
     required VoidCallback onTap,
@@ -208,59 +213,56 @@ class _SettingsScreenState extends State<SettingsScreen> {
             color: themeProvider.isDarkMode
                 ? const Color(0xFF1C1C1E)
                 : Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 2),
-              ),
-            ],
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: themeProvider.isDarkMode ? Colors.white10 : const Color(0xFFF3F4F6),
+              width: 1.5,
+            ),
           ),
           child: ListTile(
             contentPadding:
-                const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             leading: Container(
-              width: 32,
-              height: 32,
+              width: 44,
+              height: 44,
               decoration: BoxDecoration(
-                color: iconColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
+                color: themeProvider.isDarkMode ? iconColor.withOpacity(0.2) : iconBgColor,
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
                 icon,
                 color: iconColor,
-                size: 20,
+                size: 22,
               ),
             ),
             title: Text(
               title,
               style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
                 color: isDestructive
-                    ? Colors.red
+                    ? const Color(0xFFEF4444)
                     : (themeProvider.isDarkMode
                         ? Colors.white
-                        : Colors.black87),
+                        : const Color(0xFF111827)),
               ),
             ),
             subtitle: Text(
               subtitle,
               style: TextStyle(
-                fontSize: 14,
+                fontSize: 13,
                 color: themeProvider.isDarkMode
                     ? Colors.white70
-                    : const Color(0xFF8E8E93),
+                    : const Color(0xFF6B7280),
               ),
             ),
             trailing: !isDestructive
                 ? Icon(
-                    Icons.chevron_right,
+                    Icons.chevron_right_rounded,
                     color: themeProvider.isDarkMode
                         ? Colors.white70
-                        : const Color(0xFF8E8E93),
-                    size: 20,
+                        : const Color(0xFF9CA3AF),
+                    size: 22,
                   )
                 : null,
             onTap: onTap,
@@ -273,6 +275,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildToggleItem({
     required IconData icon,
     required Color iconColor,
+    required Color iconBgColor,
     required String title,
     required String subtitle,
     required bool value,
@@ -285,59 +288,57 @@ class _SettingsScreenState extends State<SettingsScreen> {
             color: themeProvider.isDarkMode
                 ? const Color(0xFF1C1C1E)
                 : Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 2),
-              ),
-            ],
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: themeProvider.isDarkMode ? Colors.white10 : const Color(0xFFF3F4F6),
+              width: 1.5,
+            ),
           ),
           child: ListTile(
             contentPadding:
-                const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             leading: Container(
-              width: 32,
-              height: 32,
+              width: 44,
+              height: 44,
               decoration: BoxDecoration(
-                color: iconColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
+                color: themeProvider.isDarkMode ? iconColor.withOpacity(0.2) : iconBgColor,
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
                 icon,
                 color: iconColor,
-                size: 20,
+                size: 22,
               ),
             ),
             title: Text(
               title,
               style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-                color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: themeProvider.isDarkMode ? Colors.white : const Color(0xFF111827),
               ),
             ),
             subtitle: Text(
               subtitle,
               style: TextStyle(
-                fontSize: 14,
+                fontSize: 13,
                 color: themeProvider.isDarkMode
                     ? Colors.white70
-                    : const Color(0xFF8E8E93),
+                    : const Color(0xFF6B7280),
               ),
             ),
             trailing: Transform.scale(
-              scale: 0.9,
+              scale: 0.8,
               child: Switch(
                 value: value,
                 onChanged: onChanged,
-                activeColor: themeProvider.primaryColor,
-                activeTrackColor: themeProvider.primaryColor.withOpacity(0.3),
+                activeColor: Colors.white,
+                activeTrackColor: const Color(0xFF3B82F6),
                 inactiveThumbColor: Colors.white,
                 inactiveTrackColor: themeProvider.isDarkMode
                     ? const Color(0xFF39393D)
-                    : const Color(0xFFE0E0E0),
+                    : const Color(0xFFE5E7EB),
+                trackOutlineColor: MaterialStateProperty.all(Colors.transparent),
               ),
             ),
           ),
@@ -349,10 +350,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildCompactAccountRow(app_auth.AuthProvider authProvider) {
     final userModel = authProvider.userModel;
     final themeProvider = Provider.of<ThemeProvider>(context);
-    final colorScheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
 
-    // Determine display values
     String displayRole;
     String displayDepartment;
 
@@ -371,48 +369,65 @@ class _SettingsScreenState extends State<SettingsScreen> {
         color: themeProvider.isDarkMode
             ? const Color(0xFF1C1C1E)
             : Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: colorScheme.outlineVariant,
-          width: 1,
+          color: themeProvider.isDarkMode ? Colors.white10 : const Color(0xFFF3F4F6),
+          width: 1.5,
         ),
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         leading: Stack(
+          clipBehavior: Clip.none,
           children: [
-            CircleAvatar(
-              radius: 28,
-              backgroundImage: NetworkImage(
-                'https://i.pravatar.cc/150?u=${authProvider.userEmail ?? 'default'}',
+            Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: const Color(0xFF60A5FA).withOpacity(0.5),
+                  width: 3,
+                ),
               ),
-              backgroundColor: colorScheme.primaryContainer,
+              child: CircleAvatar(
+                radius: 30,
+                backgroundImage: NetworkImage(
+                  'https://i.pravatar.cc/150?u=${authProvider.userEmail ?? 'default'}',
+                ),
+                backgroundColor: const Color(0xFFE0E7FF),
+              ),
             ),
-            // Approval badge overlay (bottom-right)
             if (_shouldShowApprovalBadge(userModel))
               Positioned(
-                bottom: 0,
-                right: 0,
+                bottom: -4,
+                right: -4,
                 child: _buildApprovalBadge(userModel),
               ),
           ],
         ),
         title: Text(
           userModel?.displayName ?? 'Người dùng',
-          style: textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w600,
-            color: colorScheme.onSurface,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: themeProvider.isDarkMode ? Colors.white : const Color(0xFF111827),
           ),
         ),
-        subtitle: Text(
-          subtitle,
-          style: textTheme.bodySmall?.copyWith(
-            color: colorScheme.onSurfaceVariant,
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 4.0),
+          child: Text(
+            subtitle,
+            style: TextStyle(
+              fontSize: 13,
+              color: themeProvider.isDarkMode
+                  ? Colors.white70
+                  : const Color(0xFF6B7280),
+            ),
           ),
         ),
         trailing: Icon(
-          Icons.chevron_right,
-          color: colorScheme.onSurfaceVariant,
+          Icons.chevron_right_rounded,
+          color: themeProvider.isDarkMode ? Colors.white70 : const Color(0xFF9CA3AF),
+          size: 24,
         ),
         onTap: () {
           Navigator.push(
@@ -428,7 +443,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   bool _shouldShowApprovalBadge(UserModel? userModel) {
     if (userModel == null) return false;
-    // Show badge for approved users or global admins
     return userModel.isRoleApproved == true || userModel.role == UserRole.admin;
   }
 
@@ -436,49 +450,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (userModel == null) return const SizedBox.shrink();
 
     Color badgeColor;
-    IconData iconData = Icons.check_circle;
-
-    // Gold tick for Global Admin
-    if (userModel.role == UserRole.admin) {
-      badgeColor = Colors.amber;
-    }
-    // Green tick for approved users
-    else if (userModel.isRoleApproved == true) {
-      badgeColor = Colors.green;
-    }
-    // No badge for pending/unapproved
-    else {
+    if (userModel.role == UserRole.admin || userModel.isRoleApproved == true) {
+      badgeColor = const Color(0xFFF59E0B); // Amber/Gold for tick
+    } else {
       return const SizedBox.shrink();
     }
 
     return Container(
-      width: 18,
-      height: 18,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        shape: BoxShape.circle,
-      ),
-      padding: const EdgeInsets.all(2),
-      child: Icon(
-        iconData,
-        size: 14,
+      width: 20,
+      height: 20,
+      decoration: BoxDecoration(
         color: badgeColor,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 2),
+      ),
+      child: const Icon(
+        Icons.check,
+        size: 12,
+        color: Colors.white,
       ),
     );
   }
 
   Widget _buildSectionHeader(String title) {
-    final textTheme = Theme.of(context).textTheme;
-    final colorScheme = Theme.of(context).colorScheme;
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
 
     return Padding(
-      padding: const EdgeInsets.only(left: 16, top: 24, bottom: 8),
+      padding: const EdgeInsets.only(left: 4, top: 4, bottom: 0),
       child: Text(
         title.toUpperCase(),
-        style: textTheme.labelLarge?.copyWith(
-          color: colorScheme.onSurfaceVariant,
+        style: TextStyle(
+          color: themeProvider.isDarkMode ? Colors.white60 : const Color(0xFF9CA3AF),
+          fontSize: 13,
           fontWeight: FontWeight.w700,
-          letterSpacing: 0.5,
+          letterSpacing: 1.0,
         ),
       ),
     );

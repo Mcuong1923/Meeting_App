@@ -1221,6 +1221,7 @@ class MeetingBasicForm extends StatelessWidget {
       value: value,
       items: items,
       onChanged: onChanged,
+      borderRadius: BorderRadius.circular(16),
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon),

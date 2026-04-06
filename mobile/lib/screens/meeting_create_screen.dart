@@ -12,6 +12,8 @@ import '../providers/auth_provider.dart';
 import '../providers/room_provider.dart';
 import '../providers/room_booking_provider.dart';
 import '../services/room_recommendation_engine.dart';
+import '../services/gemini_service.dart';
+import '../services/smart_schedule_service.dart';
 import '../components/room_time_slots_bottom_sheet.dart';
 
 class MeetingCreateScreen extends StatefulWidget {
@@ -43,6 +45,11 @@ class _MeetingCreateScreenState extends State<MeetingCreateScreen> {
   RoomModel? _selectedRoom;
 
   bool _isCreating = false;
+
+  // ─── AI Suggestion State ───
+  bool _isLoadingTimeSuggestion = false;
+  bool _isLoadingAgenda = false;
+  final SmartScheduleService _scheduleService = SmartScheduleService();
 
   // Quick booking data (when creating from booking reminder)
   String? _sourceBookingId;
@@ -277,6 +284,162 @@ class _MeetingCreateScreenState extends State<MeetingCreateScreen> {
 
   void _updateState() {
     setState(() {});
+  }
+
+  // ─────────────────────── AI HELPERS ───────────────────────
+
+  /// Gợi ý khung giờ họp thông minh bằng Gemini
+  Future<void> _showTimeSuggestions() async {
+    if (_selectedParticipants.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vui lòng chọn người tham dự trước')),
+      );
+      return;
+    }
+
+    setState(() => _isLoadingTimeSuggestion = true);
+
+    try {
+      final participantIds = _selectedParticipants.map((u) => u.id).toList();
+      final participantNames = {
+        for (final u in _selectedParticipants) u.id: u.displayName,
+      };
+      final durationMinutes = _endTime.hour * 60 +
+          _endTime.minute -
+          _startTime.hour * 60 -
+          _startTime.minute;
+      final duration = durationMinutes > 0 ? durationMinutes : 60;
+
+      final slots = await _scheduleService.suggestTimeSlots(
+        participantIds: participantIds,
+        participantNames: participantNames,
+        targetDate: _selectedDate,
+        durationMinutes: duration,
+      );
+
+      if (!mounted) return;
+      _showTimeSuggestionBottomSheet(slots);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Lỗi gợi ý giờ: $e'),
+          backgroundColor: Colors.red.shade600,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoadingTimeSuggestion = false);
+    }
+  }
+
+  /// Hiển thị bottom sheet chứa danh sách giờ gợi ý
+  void _showTimeSuggestionBottomSheet(List<SuggestedTimeSlot> slots) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => FractionallySizedBox(
+        heightFactor: 0.7, // Giới hạn chiều cao 70% màn hình
+        child: _AiTimeSuggestionSheet(
+          slots: slots,
+          targetDate: _selectedDate,
+          onSelect: (slot) {
+            setState(() {
+              _startTime = TimeOfDay(hour: slot.startHour, minute: slot.startMinute);
+              _endTime   = TimeOfDay(hour: slot.endHour,   minute: slot.endMinute);
+            });
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Đã áp dụng: ${slot.start} – ${slot.end}'),
+                backgroundColor: Colors.green.shade600,
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  /// Gợi ý agenda bằng Gemini và hiển thị dialog
+  Future<void> _suggestAgenda() async {
+    final title = _titleController.text.trim();
+    if (title.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vui lòng nhập tiêu đề trước')),
+      );
+      return;
+    }
+
+    setState(() => _isLoadingAgenda = true);
+
+    try {
+      final durationMinutes = _endTime.hour * 60 +
+          _endTime.minute -
+          _startTime.hour * 60 -
+          _startTime.minute;
+
+      final meetingTypeStr = {
+        MeetingType.personal:   'Cá nhân',
+        MeetingType.team:       'Team',
+        MeetingType.department: 'Phòng ban',
+        MeetingType.company:    'Toàn công ty',
+      }[_meetingType] ?? 'Thông thường';
+
+      final agenda = await GeminiService.suggestAgenda(
+        meetingTitle:      title,
+        meetingType:       meetingTypeStr,
+        durationMinutes:   durationMinutes > 0 ? durationMinutes : 60,
+        participantsCount: _selectedParticipants.length,
+      );
+
+      if (!mounted) return;
+      _showAgendaBottomSheet(
+        agenda,
+        title,
+        durationMinutes > 0 ? durationMinutes : 60,
+        _selectedParticipants.length,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Lỗi gợi ý agenda: $e'),
+          backgroundColor: Colors.red.shade600,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoadingAgenda = false);
+    }
+  }
+
+  void _showAgendaBottomSheet(String agenda, String meetingTitle, int durationMinutes, int participantsCount) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withOpacity(0.5), // Tăng lên 0.5 theo yêu cầu
+      elevation: 0,
+      builder: (_) => FractionallySizedBox(
+        heightFactor: 0.7, // Chính xác 0.7 theo yêu cầu
+        child: _AiAgendaBottomSheet(
+          agendaRawText: agenda,
+          meetingTitle: meetingTitle,
+          durationMinutes: durationMinutes,
+          participantsCount: participantsCount,
+          onApply: (String processedAgenda) {
+            _descriptionController.text = processedAgenda;
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Đã điền agenda vào phần mô tả'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          },
+        ),
+      ),
+    );
   }
 
   bool get _canCreate {
@@ -700,6 +863,58 @@ class _MeetingCreateScreenState extends State<MeetingCreateScreen> {
             ),
           ),
           const SizedBox(height: 12),
+          // ─── Nút gợi ý giờ họp AI ───
+          GestureDetector(
+            onTap: _isLoadingTimeSuggestion ? null : _showTimeSuggestions,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              decoration: BoxDecoration(
+                gradient: _selectedParticipants.isEmpty
+                    ? null
+                    : const LinearGradient(
+                        colors: [Color(0xFF1C8EF9), Color(0xFF7C5CFC)],
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                      ),
+                color: _selectedParticipants.isEmpty
+                    ? const Color(0xFFF2F4F7)
+                    : null,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: _isLoadingTimeSuggestion
+                  ? const Center(
+                      child: SizedBox(
+                        height: 18,
+                        width: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      ),
+                    )
+                  : Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text('✨', style: TextStyle(fontSize: 14)),
+                        const SizedBox(width: 6),
+                        Text(
+                          _selectedParticipants.isEmpty
+                              ? 'Chọn người tham dự để gợi ý giờ'
+                              : 'Gợi ý khung giờ thông minh',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: _selectedParticipants.isEmpty
+                                ? const Color(0xFF98A2B3)
+                                : Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+          ),
+          const SizedBox(height: 12),
           const Divider(height: 1, color: Color(0xFFE4E7EC)),
           const SizedBox(height: 12),
           Row(
@@ -963,7 +1178,45 @@ class _MeetingCreateScreenState extends State<MeetingCreateScreen> {
               _sectionIcon(Icons.description_outlined,
                   bg: const Color(0xFFF1ECFF)),
               const SizedBox(width: 12),
-              Text('M\u00d4 T\u1ea2', style: _kSectionLabel),
+              Text('MÔ TẢ / AGENDA', style: _kSectionLabel),
+              const Spacer(),
+              // ─── Nút gợi ý agenda AI ───
+              GestureDetector(
+                onTap: _isLoadingAgenda ? null : _suggestAgenda,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF7C5CFC), Color(0xFF9B7CFF)],
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: _isLoadingAgenda
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('🤖', style: TextStyle(fontSize: 12)),
+                            SizedBox(width: 4),
+                            Text(
+                              'Gợi ý AI',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 10),
@@ -972,7 +1225,7 @@ class _MeetingCreateScreenState extends State<MeetingCreateScreen> {
             maxLines: 3,
             style: const TextStyle(fontSize: 15, color: _textPrimary),
             decoration: const InputDecoration(
-              hintText: 'Th\u00eam m\u00f4 t\u1ea3...',
+              hintText: 'Thêm mô tả hoặc dùng AI để gợi ý agenda...',
               hintStyle: TextStyle(color: _placeholder),
               border: InputBorder.none,
               contentPadding: EdgeInsets.zero,
@@ -1428,6 +1681,7 @@ class _MeetingCreateScreenState extends State<MeetingCreateScreen> {
               child: DropdownButton<MeetingType>(
                 value: _meetingType,
                 isExpanded: true,
+                borderRadius: BorderRadius.circular(16),
                 onChanged: (MeetingType? newValue) {
                   if (newValue != null) {
                     setState(() {
@@ -1555,6 +1809,7 @@ class _MeetingCreateScreenState extends State<MeetingCreateScreen> {
             child: DropdownButton<MeetingType>(
               value: _meetingType,
               isExpanded: true,
+              borderRadius: BorderRadius.circular(16),
               icon: const Icon(Icons.arrow_drop_down_rounded,
                   color: _placeholder),
               items: allowedTypes.map((type) {
@@ -3726,3 +3981,882 @@ class _PriorityOptionData {
     required this.icon,
   });
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI Time Suggestion Bottom Sheet
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Bottom sheet hiển thị 3 khung giờ gợi ý từ Gemini AI.
+class _AiTimeSuggestionSheet extends StatelessWidget {
+  final List<SuggestedTimeSlot> slots;
+  final DateTime targetDate;
+  final void Function(SuggestedTimeSlot slot) onSelect;
+
+  const _AiTimeSuggestionSheet({
+    required this.slots,
+    required this.targetDate,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    final dateStr = DateFormat('dd/MM/yyyy', 'vi_VN').format(targetDate);
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFFF7F9FC),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: EdgeInsets.fromLTRB(16, 8, 16, 16 + bottom),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Drag handle
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Header
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  RichText(
+                    text: const TextSpan(
+                      text: 'Tối ưu hóa thời gian\n',
+                      style: TextStyle(
+                        fontSize: 20, // Thu nhỏ
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF1E293B),
+                        height: 1.3,
+                        letterSpacing: -0.5,
+                      ),
+                      children: [
+                        TextSpan(
+                          text: 'với AI.',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF94A3B8),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12), // Bo góc nhỏ hơn
+                      border: Border.all(color: Colors.black.withOpacity(0.05)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.calendar_today_rounded, size: 14, color: Color(0xFF64748B)),
+                        const SizedBox(width: 6),
+                        Text(
+                          dateStr,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF64748B),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              // AI Icon
+              Container(
+                padding: const EdgeInsets.all(10), // Nhỏ hơn
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Color(0x0A000000),
+                      blurRadius: 8,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: ShaderMask(
+                  shaderCallback: (bounds) => const LinearGradient(
+                    colors: [Color(0xFF1C8EF9), Color(0xFF7C5CFC)],
+                  ).createShader(bounds),
+                  child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 24),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Scrollable Slot cards (Sửa lỗi overflow ở đây)
+          Expanded(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: slots.isEmpty
+                    ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(vertical: 40),
+                          child: Text(
+                            'Không tìm được khung giờ phù hợp.\nVui lòng chọn thủ công.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Color(0xFF64748B),
+                              fontSize: 14,
+                              height: 1.5,
+                            ),
+                          ),
+                        ),
+                      )
+                    : Column(
+                        children: slots.asMap().entries.map((entry) {
+                          final i = entry.key;
+                          final slot = entry.value;
+                          return _SlotCard(
+                            slot: slot,
+                            index: i,
+                            isRecommended: i == 0,
+                            onTap: () => onSelect(slot),
+                          );
+                        }).toList(),
+                      ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SlotCard extends StatelessWidget {
+  final SuggestedTimeSlot slot;
+  final int index;
+  final bool isRecommended;
+  final VoidCallback onTap;
+
+  const _SlotCard({
+    required this.slot,
+    required this.index,
+    this.isRecommended = false,
+    required this.onTap,
+  });
+
+  static const List<List<Color>> _badgeGradients = [
+    [Color(0xFF1C8EF9), Color(0xFF7C5CFC)],
+    [Color(0xFF11998E), Color(0xFF38EF7D)],
+    [Color(0xFFFC466B), Color(0xFF3F5EFB)],
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final title = _getTitle(slot);
+    final gradientColors = _badgeGradients[index % _badgeGradients.length];
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+      margin: const EdgeInsets.only(bottom: 12), // Giảm spacing
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20), // Giảm bo góc
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x04000000), // Shadow cực mềm
+            blurRadius: 16,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(20),
+          highlightColor: gradientColors[0].withOpacity(0.04),
+          splashColor: gradientColors[1].withOpacity(0.08),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              gradient: LinearGradient(
+                colors: [
+                  gradientColors[0].withOpacity(0.015),
+                  gradientColors[1].withOpacity(0.015),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            padding: const EdgeInsets.all(16), // Padding nhỏ gọn
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Layout Cột trái: Thời gian + Nút giữ chỗ
+                SizedBox(
+                  width: 80,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(
+                        slot.start,
+                        style: const TextStyle(
+                          fontSize: 22, // Size vừa đủ
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF1E293B),
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      const Text(
+                        'đến',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF94A3B8),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        slot.end,
+                        style: const TextStyle(
+                          fontSize: 22, // Size vừa đủ
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF1E293B),
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE2E8F0).withOpacity(0.8),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: const Text(
+                          'Giữ',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF334155),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // Divider (Đường kẻ mờ)
+                Container(
+                  width: 1,
+                  height: 100,
+                  margin: const EdgeInsets.symmetric(horizontal: 14),
+                  color: const Color(0xFFF1F5F9),
+                ),
+
+                // Layout Cột phải: Title + Reason + Badge
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (isRecommended)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [gradientColors[0], gradientColors[1]],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: gradientColors[0].withOpacity(0.3),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 3),
+                                )
+                              ],
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.star_rounded, color: Colors.white, size: 12),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Khuyên dùng',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      else
+                        const SizedBox(height: 8),
+
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 15, // Title gọn hơn
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF475569),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        slot.reason.isNotEmpty ? slot.reason : 'Khung giờ gợi ý lý tưởng cho cuộc họp của bạn.',
+                        style: const TextStyle(
+                          fontSize: 13, // Reason gọn hơn
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF64748B),
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _getTitle(SuggestedTimeSlot slot) {
+    if (slot.startHour < 12) return 'Trước giờ trưa';
+    if (slot.startHour < 15) return 'Đầu giờ chiều';
+    if (slot.startHour < 18) return 'Cuối giờ chiều';
+    return 'Buổi tối';
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI Agenda Timeline Bottom Sheet
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _AgendaItemData {
+  final String title;
+  final String description;
+  final String timeText;
+
+  _AgendaItemData({
+    required this.title,
+    required this.description,
+    required this.timeText,
+  });
+}
+
+class _AiAgendaBottomSheet extends StatelessWidget {
+  final String agendaRawText;
+  final String meetingTitle;
+  final int durationMinutes;
+  final int participantsCount;
+  final void Function(String) onApply;
+
+  const _AiAgendaBottomSheet({
+    required this.agendaRawText,
+    required this.meetingTitle,
+    required this.durationMinutes,
+    required this.participantsCount,
+    required this.onApply,
+  });
+
+  List<_AgendaItemData> _parseAgenda(String text) {
+    final lines = text.split('\n');
+    final result = <_AgendaItemData>[];
+    
+    String currentTitle = '';
+    String currentDesc = '';
+    String currentTime = '';
+
+    for (final line in lines) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+
+      final isListItem = trimmed.startsWith('- ') || 
+                         trimmed.startsWith('* ') || 
+                         RegExp(r'^\d+\.').hasMatch(trimmed);
+      
+      if (isListItem) {
+        if (currentTitle.isNotEmpty) {
+          result.add(_AgendaItemData(
+            title: currentTitle,
+            description: currentDesc.trim(),
+            timeText: currentTime.isNotEmpty ? currentTime : '...',
+          ));
+          currentDesc = '';
+          currentTime = '';
+        }
+
+        String rawTitle = trimmed.replaceFirst(RegExp(r'^[\*\-\d\.\s]+'), '').trim();
+        
+        final timeMatch = RegExp(r'(\d+\s*phút)').firstMatch(rawTitle.toLowerCase());
+        if (timeMatch != null) {
+          currentTime = timeMatch.group(1)!;
+          final timeStrRegex = RegExp(r'\(\s*\d+\s*phút\s*\)|\d+\s*phút\s*:\s*|\d+\s*phút', caseSensitive: false);
+          rawTitle = rawTitle.replaceAll(timeStrRegex, '').trim();
+          if (rawTitle.startsWith('-')) rawTitle = rawTitle.substring(1).trim();
+          if (rawTitle.startsWith(':')) rawTitle = rawTitle.substring(1).trim();
+        } else {
+          final enMatch = RegExp(r'(\d+\s*min(s|utes)?|\d+m)').firstMatch(rawTitle.toLowerCase());
+          if (enMatch != null) {
+            currentTime = enMatch.group(1)!;
+            rawTitle = rawTitle.replaceAll(RegExp(r'\(\s*\d+\s*min[a-z]*\s*\)|\d+\s*min[a-z]*\s*:\s*', caseSensitive: false), '').trim();
+          }
+        }
+        
+        currentTitle = rawTitle;
+      } else {
+        if (currentTitle.isNotEmpty) {
+          currentDesc += '$trimmed\n';
+        } else {
+          currentTitle = trimmed;
+        }
+      }
+    }
+
+    if (currentTitle.isNotEmpty) {
+      result.add(_AgendaItemData(
+        title: currentTitle,
+        description: currentDesc.trim(),
+        timeText: currentTime.isNotEmpty ? currentTime : '...',
+      ));
+    }
+
+    if (result.isEmpty) {
+      result.add(_AgendaItemData(
+        title: 'Nội dung Agenda',
+        description: text,
+        timeText: '${durationMinutes} phút',
+      ));
+    }
+
+    return result;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    final items = _parseAgenda(agendaRawText);
+
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      child: Container(
+        color: const Color(0xFFF8F9FB), // Nền đặc hoàn toàn, không trong suốt
+        padding: EdgeInsets.fromLTRB(16, 8, 16, 16 + bottom),
+        child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Drag handle
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Header
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.smart_toy_rounded, color: Color(0xFF7C5CFC), size: 24),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Agenda AI gợi ý',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF7C5CFC),
+                    ),
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  const Icon(Icons.notifications_none_rounded, color: Colors.grey),
+                  const SizedBox(width: 12),
+                  CircleAvatar(
+                    radius: 16,
+                    backgroundColor: Colors.grey[200],
+                    child: const Icon(Icons.person, color: Colors.grey, size: 20),
+                  ),
+                ],
+              )
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          Expanded(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Intro Card
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.black.withOpacity(0.05)), // Optional viền nhẹ
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEDE9FF),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.auto_awesome_rounded, color: Color(0xFF7C5CFC), size: 16),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Dưới đây là gợi ý agenda cho cuộc họp "$meetingTitle" của bạn:',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: const Color(0xFF1F2937), // Title color
+                              height: 1.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Main Card
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white, // Fix card bên trong
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.04), // Nhẹ nhàng cho card con
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                      border: Border.all(color: Colors.black.withOpacity(0.05)), // Viền nhẹ
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Label
+                        const Text(
+                          'AI GENERATED STRATEGY',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.5,
+                            color: Color(0xFF7C5CFC),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        // Title
+                        Text(
+                          'Agenda Cuộc họp:\n$meetingTitle',
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF1F2937), // Title
+                            height: 1.3,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        // Info Row
+                        Row(
+                          children: [
+                            _buildInfoChip(Icons.access_time_rounded, '$durationMinutes phút'),
+                            const SizedBox(width: 12),
+                            _buildInfoChip(Icons.people_outline_rounded, '$participantsCount người'),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+
+                        // Timeline
+                        ...items.asMap().entries.map((entry) {
+                          final i = entry.key;
+                          final item = entry.value;
+                          final isLast = i == items.length - 1;
+                          return _buildTimelineItem(item, isLast);
+                        }),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Section giải thích
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.black.withOpacity(0.05)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Tại sao lại là Agenda này?',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1F2937), // Title
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'AI đã phân tích tính chất cuộc họp của bạn. Chúng tôi đề xuất phân bổ thời gian này để giải quyết các vấn đề một cách hiệu quả nhất.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF6B7280), // Subtitle
+                            height: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            _buildTag('TỐI ƯU HÓA'),
+                            const SizedBox(width: 8),
+                            _buildTag('DỰA TRÊN DỮ LIỆU'),
+                          ],
+                        )
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Buttons
+                  ElevatedButton(
+                    onPressed: () => onApply(agendaRawText),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      backgroundColor: const Color(0xFF5A45ED),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.check_circle_outline_rounded, size: 20),
+                        SizedBox(width: 8),
+                        Text(
+                          'Dùng agenda này',
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      backgroundColor: const Color(0xFFE2E8F0),
+                      foregroundColor: const Color(0xFF475569),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    child: const Text(
+                      'Bỏ qua',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    ));
+  }
+
+  Widget _buildInfoChip(IconData icon, String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: const Color(0xFF475569)),
+          const SizedBox(width: 6),
+          Text(
+            text,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF475569),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTag(String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEDE9FF),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: Color(0xFF7C5CFC),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimelineItem(_AgendaItemData item, bool isLast) {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Line & Dot
+          Column(
+            children: [
+              Container(
+                width: 12,
+                height: 12,
+                margin: const EdgeInsets.only(top: 4),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF5A45ED),
+                  shape: BoxShape.circle,
+                ),
+              ),
+              if (!isLast)
+                Expanded(
+                  child: Container(
+                    width: 2,
+                    color: const Color(0xFFE2E8F0),
+                    margin: const EdgeInsets.symmetric(vertical: 4),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(width: 16),
+          
+          // Content
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(bottom: isLast ? 0 : 24.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          item.title,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1F2937), // Title
+                            height: 1.3,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      if (item.timeText != '...')
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEDE9FF),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            item.timeText,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF5A45ED),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  if (item.description.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.only(top: 2.0),
+                          child: Icon(Icons.subdirectory_arrow_right_rounded, size: 14, color: Color(0xFF64748B)), // Darkened icon
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            item.description,
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              color: Color(0xFF6B7280), // Subtitle
+                              height: 1.5,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+

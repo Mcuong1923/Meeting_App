@@ -21,9 +21,7 @@ class _MeetingApprovalListScreenState extends State<MeetingApprovalListScreen> {
     final meetingProvider = Provider.of<MeetingProvider>(context);
     final currentUser = authProvider.userModel;
 
-    // Filter only pending meetings that current user THỰC SỰ có quyền duyệt
-    final pendingMeetings = meetingProvider.meetings.where((m) {
-      if (m.approvalStatus != MeetingApprovalStatus.pending) return false;
+    final approvableMeetings = meetingProvider.meetings.where((m) {
       if (currentUser == null) return false;
       // Không hiển thị cuộc họp do chính mình tạo
       if (m.creatorId == currentUser.id) return false;
@@ -39,55 +37,69 @@ class _MeetingApprovalListScreenState extends State<MeetingApprovalListScreen> {
       return false;
     }).toList();
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF6F7FB),
-      appBar: AppBar(
-        title: const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Phê duyệt cuộc họp',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 20,
-                color: Color(0xFF1A1A1A),
-              ),
+    final pendingMeetings = approvableMeetings.where((m) => m.approvalStatus == MeetingApprovalStatus.pending).toList();
+    final approvedMeetings = approvableMeetings.where((m) => m.approvalStatus == MeetingApprovalStatus.approved).toList();
+    final rejectedMeetings = approvableMeetings.where((m) => m.approvalStatus == MeetingApprovalStatus.rejected).toList();
+
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8F9FA),
+        appBar: AppBar(
+          title: const Text(
+            'Phê duyệt cuộc họp',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 20,
+              color: Color(0xFF111827),
             ),
-            Text(
-              'Kiểm tra và xử lý yêu cầu',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey,
-                fontWeight: FontWeight.normal,
+          ),
+          backgroundColor: const Color(0xFFF8F9FA),
+          elevation: 0,
+          centerTitle: true,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Color(0xFF111827)),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          bottom: const TabBar(
+            labelColor: Color(0xFFF97316),
+            unselectedLabelColor: Color(0xFF6B7280),
+            indicatorColor: Color(0xFFF97316),
+            indicatorWeight: 3,
+            labelStyle: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+            unselectedLabelStyle: TextStyle(fontWeight: FontWeight.w500, fontSize: 15),
+            tabs: [
+              Tab(text: 'Chờ duyệt'),
+              Tab(text: 'Đã duyệt'),
+              Tab(text: 'Từ chối'),
+            ],
+          ),
+        ),
+        body: currentUser == null
+            ? const Center(child: CircularProgressIndicator())
+            : TabBarView(
+                children: [
+                  _buildList(pendingMeetings, 'Không có yêu cầu chờ duyệt'),
+                  _buildList(approvedMeetings, 'Không có yêu cầu đã duyệt'),
+                  _buildList(rejectedMeetings, 'Không có yêu cầu từ chối'),
+                ],
               ),
-            ),
-          ],
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: false,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded,
-              size: 20, color: Color(0xFF1A1A1A)),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
       ),
-      body: currentUser == null
-          ? const Center(child: CircularProgressIndicator())
-          : pendingMeetings.isEmpty
-              ? _buildEmptyState()
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: pendingMeetings.length,
-                  itemBuilder: (context, index) {
-                    final meeting = pendingMeetings[index];
-                    return _buildApprovalCard(meeting);
-                  },
-                ),
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildList(List<MeetingModel> meetings, String emptyMessage) {
+    if (meetings.isEmpty) return _buildEmptyState(emptyMessage);
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      itemCount: meetings.length,
+      itemBuilder: (context, index) {
+        return _buildApprovalCard(meetings[index]);
+      },
+    );
+  }
+
+  Widget _buildEmptyState(String message) {
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -108,24 +120,16 @@ class _MeetingApprovalListScreenState extends State<MeetingApprovalListScreen> {
             child: const Icon(
               Icons.check_circle_outline,
               size: 64,
-              color: Colors.green,
+              color: Color(0xFF10B981),
             ),
           ),
           const SizedBox(height: 16),
-          const Text(
-            'Không có yêu cầu nào',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF1A1A1A),
-            ),
-          ),
-          const SizedBox(height: 8),
           Text(
-            'Tất cả cuộc họp đã được xử lý',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey.shade600,
+            message,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF374151),
             ),
           ),
         ],
@@ -134,17 +138,43 @@ class _MeetingApprovalListScreenState extends State<MeetingApprovalListScreen> {
   }
 
   Widget _buildApprovalCard(MeetingModel meeting) {
+    // Determine badge color and text based on status
+    Color badgeBgColor;
+    Color badgeTextColor;
+    String badgeText;
+
+    switch (meeting.approvalStatus) {
+      case MeetingApprovalStatus.pending:
+        badgeBgColor = const Color(0xFFFFEDD5); // Light Orange
+        badgeTextColor = const Color(0xFFEA580C); // Dark Orange
+        badgeText = 'CHỜ DUYỆT';
+        break;
+      case MeetingApprovalStatus.approved:
+        badgeBgColor = const Color(0xFFD1FAE5); // Light Green
+        badgeTextColor = const Color(0xFF059669); // Dark Green
+        badgeText = 'ĐÃ DUYỆT';
+        break;
+      case MeetingApprovalStatus.rejected:
+        badgeBgColor = const Color(0xFFFEE2E2); // Light Red
+        badgeTextColor = const Color(0xFFDC2626); // Dark Red
+        badgeText = 'TỪ CHỐI';
+        break;
+      default:
+        badgeBgColor = const Color(0xFFF3F4F6);
+        badgeTextColor = const Color(0xFF4B5563);
+        badgeText = 'KHÔNG RÕ';
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE8E8EE)),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 16,
-            offset: const Offset(0, 6),
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -153,23 +183,11 @@ class _MeetingApprovalListScreenState extends State<MeetingApprovalListScreen> {
         children: [
           // Header
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2C1B47).withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: const Icon(
-                    Icons.calendar_today_rounded,
-                    color: Color(0xFF2C1B47),
-                    size: 22,
-                  ),
-                ),
-                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -177,36 +195,51 @@ class _MeetingApprovalListScreenState extends State<MeetingApprovalListScreen> {
                       Text(
                         meeting.title,
                         style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF1A1A1A),
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF111827),
+                          height: 1.3,
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Tạo bởi: ${meeting.creatorName}',
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          color: Colors.grey.shade600,
-                        ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Icon(Icons.person, size: 16, color: Color(0xFF6B7280)),
+                          const SizedBox(width: 6),
+                          RichText(
+                            text: TextSpan(
+                              style: const TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+                              children: [
+                                const TextSpan(text: 'Yêu cầu bởi: '),
+                                TextSpan(
+                                  text: meeting.creatorName,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF374151),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
+                const SizedBox(width: 12),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFFF8E6),
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: const Color(0xFFF5D48A)),
+                    color: badgeBgColor,
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Text(
-                    'Chờ duyệt',
+                  child: Text(
+                    badgeText,
                     style: TextStyle(
                       fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFFB87400),
+                      fontWeight: FontWeight.w700,
+                      color: badgeTextColor,
+                      letterSpacing: 0.5,
                     ),
                   ),
                 ),
@@ -214,120 +247,101 @@ class _MeetingApprovalListScreenState extends State<MeetingApprovalListScreen> {
             ),
           ),
 
-          const Divider(height: 1, color: Color(0xFFEDEDF2)),
+          const Divider(height: 1, thickness: 1, color: Color(0xFFF3F4F6)),
 
           // Details
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            padding: const EdgeInsets.all(20),
             child: Column(
               children: [
                 _buildInfoRow(
-                  Icons.access_time_rounded,
-                  '${DateFormat('HH:mm').format(meeting.startTime)} - ${DateFormat('HH:mm').format(meeting.endTime)}',
-                  DateFormat('dd/MM/yyyy').format(meeting.startTime),
+                  Icons.access_time_filled_rounded,
+                  '${DateFormat('HH:mm').format(meeting.startTime)} - ${DateFormat('HH:mm').format(meeting.endTime)}, ${DateFormat('dd/MM/yyyy').format(meeting.startTime)}',
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
                 _buildInfoRow(
-                  Icons.location_on_outlined,
+                  Icons.location_on_rounded,
                   meeting.locationType == MeetingLocationType.virtual
                       ? 'Online'
-                      : 'Offline',
-                  meeting.physicalLocation ?? 'Chưa có địa điểm',
+                      : (meeting.physicalLocation ?? 'Chưa xác định'),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
                 _buildInfoRow(
-                  Icons.people_outline,
-                  'Người tham gia',
-                  '${meeting.participants.length} người',
+                  Icons.people_alt_rounded,
+                  '${meeting.participants.length} người tham gia',
                 ),
               ],
             ),
           ),
 
-          // Actions
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => _handleRejection(meeting),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFFD84343),
-                      side: const BorderSide(color: Color(0xFFFFCDD2)),
-                      backgroundColor: const Color(0xFFFFEBEE),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+          // Actions (Only show for pending)
+          if (meeting.approvalStatus == MeetingApprovalStatus.pending) ...[
+            const Divider(height: 1, thickness: 1, color: Color(0xFFF3F4F6)),
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => _handleRejection(meeting),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFFEF4444),
+                        side: const BorderSide(color: Color(0xFFFCA5A5), width: 1.5),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: const Text(
+                        'Từ chối',
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
                       ),
                     ),
-                    child: const Text(
-                      'Từ chối',
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => _handleApproval(meeting),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF2C1B47),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => _handleApproval(meeting),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFFEF4444),
+                        side: const BorderSide(color: Color(0xFFFCA5A5), width: 1.5),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
                       ),
-                      elevation: 0,
-                    ),
-                    child: const Text(
-                      'Phê duyệt',
-                      style: TextStyle(fontWeight: FontWeight.w600),
+                      child: const Text(
+                        'Phê duyệt',
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String label, String value) {
+  Widget _buildInfoRow(IconData icon, String text) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(
-            color: const Color(0xFF2C1B47).withOpacity(0.06),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(icon, size: 14, color: const Color(0xFF2C1B47)),
-        ),
-        const SizedBox(width: 10),
+        Icon(icon, size: 20, color: const Color(0xFFEA580C)),
+        const SizedBox(width: 12),
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11.5,
-                  color: Colors.grey.shade600,
-                ),
+          child: Padding(
+            padding: const EdgeInsets.only(top: 1.0),
+            child: Text(
+              text,
+              style: const TextStyle(
+                fontSize: 14,
+                color: Color(0xFF4B5563),
+                height: 1.3,
               ),
-              const SizedBox(height: 2),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF2B2B2B),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ],

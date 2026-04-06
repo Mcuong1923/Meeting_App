@@ -13,6 +13,7 @@ import '../models/meeting_comment_model.dart';
 import '../models/meeting_minutes_model.dart';
 import '../providers/file_provider_simple.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'task_management_screen.dart';
 import 'meeting_minutes_editor_screen.dart';
 import '../providers/meeting_minutes_provider.dart';
@@ -66,7 +67,10 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen>
   // List<MeetingDecision> _decisions = []; // Moved to provider
   List<MeetingTask> _tasks = [];
   List<MeetingNote> _notes = [];
-  List<MeetingMinutesModel> _minutesVersions = []; // Meeting minutes versions
+  List<MeetingMinutesModel> _minutesVersions = [];
+  // Files chờ xác nhận upload
+  List<PlatformFile> _selectedFiles = [];
+  bool _isUploading = false;
   late TextEditingController _commentController;
   FocusNode? _commentFocusNode;
   Future<MeetingModel?>? _meetingFuture;
@@ -2751,37 +2755,149 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen>
     final fileProvider = context.watch<SimpleFileProvider>();
     final files = fileProvider.files;
     final isLoading = fileProvider.isLoading;
+    final hasPending = _selectedFiles.isNotEmpty;
 
     return Column(
       children: [
-        // Upload button at top
+        // ── Nút Chọn tệp luôn hiển thị ─────────────────────────
         Container(
           width: double.infinity,
-          margin: const EdgeInsets.all(16),
+          margin: EdgeInsets.fromLTRB(16, 16, 16, hasPending ? 8 : 16),
           child: ElevatedButton.icon(
-            onPressed: _pickFile,
-            icon: const Icon(Icons.upload_rounded, size: 22),
+            onPressed: _isUploading ? null : _pickFilesOnly,
+            icon: const Icon(Icons.folder_open_rounded, size: 20),
             label: const Text(
-              'Tải lên tài liệu',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
+              'Chọn tệp',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF3B82F6),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
+              backgroundColor: Colors.white,
+              foregroundColor: const Color(0xFF3B82F6),
+              padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(32),
+                side: const BorderSide(color: Color(0xFF3B82F6), width: 1.5),
               ),
-              elevation: 6,
-              shadowColor: const Color(0xFF3B82F6).withOpacity(0.35),
+              elevation: 0,
             ),
           ),
         ),
 
-        // File list
+        // ── Preview files chờ upload ────────────────────────────
+        if (hasPending) ...
+          [
+            // Danh sách file đã chọn
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0F5FF),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFF3B82F6).withOpacity(0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Đã chọn ${_selectedFiles.length} tệp',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF3B82F6),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ..._selectedFiles.map((f) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _getFileIcon(f.name),
+                          size: 18,
+                          color: _getFileIconColor(f.name),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            f.name,
+                            style: const TextStyle(fontSize: 13),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Text(
+                          _formatFileSize(f.size),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Nút Tải lên + Hủy
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  // Nút Hủy
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _isUploading
+                          ? null
+                          : () => setState(() => _selectedFiles = []),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(32)),
+                        side: BorderSide(color: Colors.grey.shade400),
+                      ),
+                      child: const Text('Hủy',
+                          style: TextStyle(
+                              fontSize: 15, fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Nút Tải lên
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton.icon(
+                      onPressed: _isUploading ? null : _uploadSelectedFiles,
+                      icon: _isUploading
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Icon(Icons.upload_rounded, size: 20),
+                      label: Text(
+                        _isUploading ? 'Đang tải...' : 'Tải lên',
+                        style: const TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w600),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF3B82F6),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(32)),
+                        elevation: 4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+
+        // ── Danh sách file đã upload ────────────────────────────
         Expanded(
           child: isLoading
               ? const Center(child: CircularProgressIndicator())
@@ -2795,10 +2911,7 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen>
                           decoration: const BoxDecoration(
                             shape: BoxShape.circle,
                             gradient: RadialGradient(
-                              colors: [
-                                Color(0xFFE0ECFF),
-                                Color(0xFFFFFFFF),
-                              ],
+                              colors: [Color(0xFFE0ECFF), Color(0xFFFFFFFF)],
                               center: Alignment(0, 0.2),
                               radius: 0.9,
                             ),
@@ -2827,30 +2940,22 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen>
                           ),
                         ),
                         const SizedBox(height: 24),
-                        const Text(
-                          'Chưa có tài liệu',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF101828),
-                          ),
-                        ),
+                        const Text('Chưa có tài liệu',
+                            style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF101828))),
                         const SizedBox(height: 8),
                         const Text(
-                          'Tài liệu được tải lên sẽ xuất hiện tại đây',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Color(0xFF98A2B3),
-                          ),
-                        ),
+                            'Tài liệu được tải lên sẽ xuất hiện tại đây',
+                            style: TextStyle(
+                                fontSize: 13, color: Color(0xFF98A2B3))),
                       ],
                     )
                   : ListView.builder(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       itemCount: files.length,
-                      itemBuilder: (context, index) {
-                        return _buildFileItem(files[index]);
-                      },
+                      itemBuilder: (ctx, i) => _buildFileItem(files[i]),
                     ),
         ),
       ],
@@ -2910,16 +3015,46 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen>
             ),
           ),
 
-          // Delete button only
-          IconButton(
-            icon: const Icon(Icons.close_rounded, size: 22),
-            color: Colors.grey.shade600,
-            onPressed: () async {
-              final fileId = file['id'] as String?;
-              if (fileId != null) {
-                await context.read<SimpleFileProvider>().deleteFile(fileId);
-              }
-            },
+          // Download + Delete buttons
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Nút download
+              IconButton(
+                icon: const Icon(Icons.download_rounded, size: 22),
+                color: const Color(0xFF5B7FED),
+                tooltip: 'Tải xuống',
+                onPressed: () async {
+                  final url = file['downloadUrl'] as String?;
+                  if (url != null && url.isNotEmpty) {
+                    final uri = Uri.parse(url);
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri,
+                          mode: LaunchMode.externalApplication);
+                    } else {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text('Không thể mở file')),
+                        );
+                      }
+                    }
+                  }
+                },
+              ),
+              // Nút xóa
+              IconButton(
+                icon: const Icon(Icons.close_rounded, size: 22),
+                color: Colors.grey.shade600,
+                tooltip: 'Xóa',
+                onPressed: () async {
+                  final fileId = file['id'] as String?;
+                  if (fileId != null) {
+                    await context.read<SimpleFileProvider>().deleteFile(fileId);
+                  }
+                },
+              ),
+            ],
           ),
         ],
       ),
@@ -2982,46 +3117,94 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen>
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
-  Future<void> _pickFile() async {
+  /// Chỉ chọn file, chưa upload
+  Future<void> _pickFilesOnly() async {
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.platform.pickFiles(
         allowMultiple: true,
         type: FileType.any,
       );
-
-      if (result != null) {
-        final currentUser = context.read<AuthProvider>().userModel;
-        if (currentUser == null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Không xác định được người dùng hiện tại'),
-              backgroundColor: Colors.red,
-            ),
-          );
-          return;
-        }
-
-        final fileProvider = context.read<SimpleFileProvider>();
-        try {
-          await fileProvider.uploadFiles(
-            result.files,
-            currentUser.id,
-            currentUser.displayName,
-            meetingId: widget.meetingId,
-          );
-        } catch (e) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Tải lên tài liệu thất bại'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+      if (result != null && result.files.isNotEmpty) {
+        setState(() => _selectedFiles = result.files);
       }
     } catch (e) {
-      // Handle error
-      print('Error picking file: $e');
+      print('Error picking files: $e');
+    }
+  }
+
+  void _showCustomSnackBar(String message, bool isSuccess) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                isSuccess
+                    ? Icons.check_circle_rounded
+                    : Icons.error_outline_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor:
+            isSuccess ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.only(bottom: 32, left: 16, right: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        elevation: 4,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  /// Upload các file đã chọn sau khi người dùng xác nhận
+  Future<void> _uploadSelectedFiles() async {
+    if (_selectedFiles.isEmpty) return;
+    final currentUser = context.read<AuthProvider>().userModel;
+    if (currentUser == null) {
+      _showCustomSnackBar('Không xác định được danh tính người dùng.', false);
+      return;
+    }
+
+    setState(() => _isUploading = true);
+    final fileProvider = context.read<SimpleFileProvider>();
+    try {
+      await fileProvider.uploadFiles(
+        _selectedFiles,
+        currentUser.id,
+        currentUser.displayName,
+        meetingId: widget.meetingId,
+      );
+      setState(() => _selectedFiles = []);
+      _showCustomSnackBar('Tải lên tài liệu thành công!', true);
+    } catch (e) {
+      _showCustomSnackBar('Tải lên thất bại. Vui lòng thử lại.', false);
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
     }
   }
 

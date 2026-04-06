@@ -30,6 +30,9 @@ migrate_working_dir/
 **/google-services.json
 firebase-debug.log
 
+# API keys & secrets (KHÔNG commit file này!)
+lib/config.dart
+
 # Symbolication related
 app.*.symbols
 
